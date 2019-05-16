@@ -1,14 +1,20 @@
 
+--Baseline 2019
+--Tables have been updated from 2018 edition
+--		Temp tables moved to Hydro
+--		Hydro was moved to production
+
+
 -----which consents are considered
 
 SELECT 
 	distinct (Wap.[RecordNo])
 	,[B1_APPL_STATUS]
 	,(case when (B1_APPL_STATUS ='Terminated - Replaced') then 'Child' else
-		(case when (B1_APPL_STATUS in ('Issued - Active', 'Issued - s124 Continuance') and fmDate >  '2017-10-01 00:00:00.000') then 'Parent' else NULL end)
+		(case when (B1_APPL_STATUS in ('Issued - Active', 'Issued - s124 Continuance') and fmDate >  '2018-10-01 00:00:00.000') then 'Parent' else NULL end)
 	end) as ParentorChild
 	,(case when (B1_APPL_STATUS ='Terminated - Replaced') then [ChildAuthorisations] else
-		(case when (B1_APPL_STATUS in ('Issued - Active', 'Issued - s124 Continuance') and fmDate >  '2017-10-01 00:00:00.000') then [ParentAuthorisations] else NULL end)
+		(case when (B1_APPL_STATUS in ('Issued - Active', 'Issued - s124 Continuance') and fmDate >  '2018-10-01 00:00:00.000') then [ParentAuthorisations] else NULL end)
 	end) as ParentChildConsent
 	,MAX(CWMSZone.CWMSZone) as CWMSZone
 	,fmDate
@@ -40,9 +46,9 @@ where
 	--and 
 	--Con.Activity like 'Take%' 
 	and 
-	((B1_APPL_STATUS in ('Issued - Active', 'Issued - s124 Continuance') and fmDate <  '2018-07-01 00:00:00.000')
+	((B1_APPL_STATUS in ('Issued - Active', 'Issued - s124 Continuance') and fmDate <  '2019-07-01 00:00:00.000')
 	or
-	(B1_APPL_STATUS ='Terminated - Replaced' and toDate >  '2017-10-01 00:00:00.000' )) --changed to first of October
+	(B1_APPL_STATUS ='Terminated - Replaced' and toDate >  '2018-10-01 00:00:00.000' )) --changed to first of October
 	and [B1_PER_SUB_TYPE]='Water Permit (s14)' 
 
 group by Wap.[RecordNo]
@@ -271,13 +277,14 @@ SELECT
 into 
 	#Telemetry
 FROM 
-	[Water_TEMP].[dbo].[HilltopUsageSiteDataLog20180710] --Static copy from dev01.hydro db
+	[EDWProd01].[Hydro].[dbo].[HilltopUsageSiteDataLog] -- production copy from hydro
+--	[Water_TEMP].[dbo].[HilltopUsageSiteDataLog20180710] --Static copy from dev01.hydro db
 where 
-	end_date > '2018-01-01 00:00:00.000' 
+	end_date > '2019-01-01 00:00:00.000' 
 	and 
 	folder = 'Telemetry' 
-	AND 
-	[hts_file] NOT LIKE '%.hts'
+	--AND 
+	--[hts_file] NOT LIKE '%.hts'
 
 -----Combine all details to WAP
 Select
@@ -407,18 +414,36 @@ from
 
 ------data extract Hydro db
 
+SELECT  
+	Distinct [ExtSiteID]
+	,COUNT (Distinct([DateTime])) as DayCount
+	,Max([DateTime]) as MaxDate
+into #CountWAPDays
+FROM 
+	[EDWProd01].[Hydro].[dbo].[TSDataNumericDaily]
+where 
+	[DatasetTypeID] in (9,12) 
+	and 
+	[DateTime] between '2018-07-01'and '2019-06-30'
+group by 
+	[ExtSiteID]
+
+
 SELECT 
 	Wap.RecordNo
 	,COUNT(DISTINCT([ExtSiteID])) as SiteCount
     ,SUM([DayCount]) as DayCountSum
 	,MAX([MaxDate]) as MaxDate
 into #DayCountSum
+
 FROM 
-	[Water_TEMP].[dbo].[Season1718_WAPDayCount20180906] WDC --this table is static extract and won't have all data
+	#CountWAPDays WDC 
 	inner join  [DataWarehouse].[dbo].[D_ACC_Act_Water_TakeWaterWAPAlloc] Wap
 	on WDC.ExtSiteID=wap.WAP
 where Wap.Activity like 'Take%' 
 group by Wap.RecordNo
+
+
 
 
 
@@ -447,9 +472,9 @@ from
 where 
 	ins.Subtype = 'Water Use Data' 
 	and
-	ins.NextInspectionDate >='2017-07-13 00:00:00.000' --had a look at data and chose start and stop date based on that.
+	ins.NextInspectionDate >='2018-07-13 00:00:00.000' --had a look at data and chose start and stop date based on that.
 	and
-	ins.NextInspectionDate <='2017-11-01 00:00:00.000' 
+	ins.NextInspectionDate <='2019-11-01 00:00:00.000' 
 	and
 	rel2.[PARENT_InspectionID] is null --resolved duplicates (23 consents)
 
@@ -468,9 +493,9 @@ from
 where 
 	Subtype = 'Water Use - Alert'
 	and 
-	NextInspectionDate >='2017-07-13 00:00:00.000' 
+	NextInspectionDate >='2018-07-13 00:00:00.000' 
 	and
-	NextInspectionDate <='2018-06-30 00:00:00.000'
+	NextInspectionDate <='2019-06-30 00:00:00.000'
 
 --Combine all
 Select 
@@ -495,6 +520,8 @@ from
 	left outer join #dailyalert da
 	on B.RecordNo=da.RecordNo
 
+Select *
+From #allstuff
 
 --select * --SPECIFY
 --from 
