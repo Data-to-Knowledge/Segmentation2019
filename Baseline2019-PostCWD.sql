@@ -2,7 +2,7 @@
 -----which consents are considered
 
 SELECT 
-	distinct (Wap.[RecordNo])
+	distinct (Wap.[RecordNumber])
 	,[B1_APPL_STATUS]
 	,(case when (B1_APPL_STATUS ='Terminated - Replaced') then 'Child' else
 		(case when (B1_APPL_STATUS in ('Issued - Active', 'Issued - s124 Continuance') and fmDate >  '2017-10-01 00:00:00.000') then 'Parent' else NULL end)
@@ -16,20 +16,20 @@ SELECT
 	,Per.HolderAddressFullName
     ,Wap.[Activity]
     ,SUM([Max Rate Pro Rata (l/s)]) as CombinedRate
-	,MAX([Max Rate for WAP (l/s)]) as MaxRate
-	,(Case when (COUNT(Distinct([From Month]))>1 or  COUNT( DISTINCT([To Month]))>1) then Max([Max Rate for WAP (l/s)]) else Null end) as MaxOfDifferentPeriodRate
+	,MAX([MaxRateForWAP_ls]) as MaxRate
+	,(Case when (COUNT(Distinct([From Month]))>1 or  COUNT( DISTINCT([To Month]))>1) then Max([MaxRateForWAP_ls]) else Null end) as MaxOfDifferentPeriodRate
 	--,CAST(Con.[Consented Annual Volume (m3/year)] as Float) as CVolume
-	,CAST(Dat.[Full Effective Annual Volume (m3/year)] as Float) as FEVolume
-into 
-	#tempAllConsents2 
+	,CAST(Dat.[EffectiveAnnualVolume_m3year] as Float) as FEVolume
+--into 
+--	#tempAllConsents2 
 FROM 
-	[DataWarehouse].[dbo].[D_ACC_Act_Water_TakeWaterWAPAlloc] Wap --rate of take
+	[DataWarehouse].[dbo].[D_ACC_Act_Water_TakeWaterWAPAllocation] Wap --rate of take
 	inner join [DataWarehouse].[dbo].[F_ACC_PERMIT] Per --permit
-		on Wap.RecordNo=Per.B1_ALT_ID
+		on Wap.RecordNumber=Per.B1_ALT_ID
 	--left outer join [DataWarehouse].[dbo].[D_ACC_Act_Water_TakeWaterConsent] Con --consented annual volume
 	--	on Wap.RecordNo=Con.RecordNo
-	left outer join [DataWarehouse].[dbo].[D_ACC_Act_Water_TakeWaterAllocData] Dat --Effective annual volume Changed to left outer join!!!!!!!!!!!!!!!!!
-		on Wap.RecordNo=Dat.RecordNo and Wap.Activity=Dat.Activity
+	left outer join [DataWarehouse].[dbo].[D_ACC_Act_Water_TakeWaterPermitVolume] Dat --Effective annual volume Changed to left outer join!!!!!!!!!!!!!!!!!
+		on Wap.RecordNumber=Dat.RecordNumber and Wap.Activity=Dat.Activity
 	join (SELECT [B1_ALT_ID], [AttributeValue] as CWMSZone
 			  FROM [DataWarehouse].[dbo].[F_ACC_SpatialAttributes2]
 			  where [AttributeType] = 'CWMS Zone'
@@ -45,7 +45,7 @@ where
 	(B1_APPL_STATUS ='Terminated - Replaced' and toDate >  '2017-10-01 00:00:00.000' )) --changed to first of October
 	and [B1_PER_SUB_TYPE]='Water Permit (s14)' 
 
-group by Wap.[RecordNo]
+group by Wap.[RecordNumber]
 	,[B1_APPL_STATUS]
 	,ChildAuthorisations
 	,[ParentAuthorisations]
@@ -54,7 +54,8 @@ group by Wap.[RecordNo]
 	,toDate
 	,Per.HolderAddressFullName
     ,Wap.[Activity]
-	,[Full Effective Annual Volume (m3/year)] 
+	,[EffectiveAnnualVolume_m3year] 
+
 
 
 

@@ -3,6 +3,10 @@
 --Tables have been updated from 2018 edition
 --		Temp tables moved to Hydro
 --		Hydro was moved to production
+--Verifications have been added
+--Parameters have been updated
+--		Dates
+--		Match Rainbow
 
 
 -----which consents are considered

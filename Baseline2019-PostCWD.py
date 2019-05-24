@@ -38,12 +38,10 @@ ConsentColNames = {
 ConsentImportFilter = {
        'B1_PER_SUB_TYPE' : ['Water Permit (s14)'] ,
        'B1_APPL_STATUS' : ['Terminated - Replaced', 'Issued - Active', 'Issued - s124 Continuance']
-#    'B1_APPL_STATUS' : ['Issued - Active', 'Issued - s124 Continuance']
-           
         }
 Consentwhere_op = 'AND'
 ConsentDate_col = 'toDate'
-Consentfrom_date = '2018-10-1' #dates are inclusive in PY and exclusive in SQL
+ConsentStart = '2018-10-1' #dates are inclusive in PY and exclusive in SQL
 ConsentServer = 'SQL2012Prod03'
 ConsentDatabase = 'DataWarehouse'
 ConsentTable = 'F_ACC_PERMIT'
@@ -57,11 +55,8 @@ Consent = pdsql.mssql.rd_sql(
                    where_op = Consentwhere_op,
                    where_in = ConsentImportFilter,
                    date_col = ConsentDate_col,
-                   from_date = Consentfrom_date
+                   from_date = ConsentStart
                    )
-
-## ##### filter here for active before end date
-
 Consent.rename(columns=ConsentColNames, inplace=True)
 #filter
 # consent list
@@ -70,8 +65,8 @@ ConsentMaster = Consent['ConsentNo'].values.tolist()
 
 # WAP Information
 WAPCol = [
-        'WAP',
         'RecordNo',
+        'WAP',
         'Activity',
         'Max Rate Pro Rata (l/s)',
         'Max Rate for WAP (l/s)',
@@ -87,7 +82,6 @@ WAPImportFilter = {
         }
 WAPwhere_op = 'AND'
 WAPServer = 'SQL2012Prod03'
-#WAPServer = 'SQL2012Test01'
 WAPDatabase = 'DataWarehouse'
 WAPTable = 'D_ACC_Act_Water_TakeWaterWAPAlloc'
 
@@ -110,7 +104,7 @@ LocationCol = [
         'AttributeValue'
         ]
 LocationColNames = {
-         'B1_ALT_ID' : 'ConsentNo',
+         'B1_ALT_ID' : 'RecordNo',
          'AttributeValue' : 'CWMSZone' 
         }
 LocationImportFilter = {
@@ -133,55 +127,32 @@ Location = pdsql.mssql.rd_sql(
 
 Location.rename(columns=LocationColNames, inplace=True)
 
-x = Location.groupby(['ConsentNo'])['CWMSZone'].aggregate('count')
+x = Location.groupby(['RecordNo'])['CWMSZone'].aggregate('count')
 x2 = x[x > 1] # 53 consents with more than one zone
 x2.max() # 10
 x2.mean() # 2.6
 
 Location.sort_values(by = ['CWMSZone'], inplace  = True)
-Location = Location.drop_duplicates(subset = 'ConsentNo', keep = 'last') #last in alphabet matches MAX() from SQL
+Location.drop_duplicates(subset = 'RecordNo', keep = 'last') #last in alphabet matches MAX() from SQL
 # two consents w/o locations
 # CRC185906
 # CRC191696
 
 # Full Effective Volume
 FEVCol = [
-        'RecordNo',
-        'Activity',
-        'Full Effective Annual Volume (m3/year)'
+        
         ]
 FEVColNames = {
-        'RecordNo': 'ConsentNo',
-        'Full Effective Annual Volume (m3/year)' : 'FEV'
+        
         }
 FEVImportFilter = {
-        'Activity' : ['Take Surface Water','Take Groundwater'],
-        'RecordNo' : ConsentMaster
+       
         }
-#FEVStart = 
-#FEVEnd = 
-FEVServer = 'SQL2012Prod03'
-FEVDatabase = 'DataWarehouse'
-FEVTable = 'D_ACC_Act_Water_TakeWaterAllocData'
-
-FEV = pdsql.mssql.rd_sql(
-                   server = FEVServer,
-                   database = FEVDatabase, 
-                   table = FEVTable,
-                   col_names = FEVCol,
-                   where_in = FEVImportFilter
-                   )
-
-FEV.rename(columns=FEVColNames, inplace=True)
-FEV = FEV.drop_duplicates(subset = ['ConsentNo', 'Activity','FEV'])
-
-y = pd.merge(WAP, FEV, on =['ConsentNo','Activity'], how = 'left')
-x = pd.merge(Consent, FEV, on ='ConsentNo', how = 'left')
-z = pd.merge(WAP, Location, on ='ConsentNo', how = 'left')
-w = pd.merge(Consent, Location, on ='ConsentNo', how = 'left')
-v = pd.merge(Consent, WAP, on ='ConsentNo', how = 'inner')
-
-
+FEVStart = 
+FEVEnd = 
+FEVServer = 
+FEVDatabase = 
+FEVTable = 
 
 # Campaign Participants
 CampaignCol = [
