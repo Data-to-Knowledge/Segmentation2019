@@ -20,6 +20,7 @@ WAPMaster = []
 # Set Risk Paramters
 TermDate = '2018-10-01'
 TermDate = datetime.strptime(TermDate, '%Y-%m-%d')
+TelemetryDate = '2019-01-01'
 
 
 
@@ -280,14 +281,14 @@ Location = Location.drop_duplicates()
 Location.rename(columns=LocationColNames, inplace=True)
 
 x = Location.groupby(['ConsentNo'])['CWMSZone'].aggregate('count')
-x2 = x[x > 1] # 53 consents with more than one zone
+x2 = x[x > 1] # 54 consents with more than one zone
 x2.max() # 10
 x2.mean() # 2.6
 
 # data.groupby('month', as_index=False).agg({"duration": "sum"})
 # should work better
 Location_agg = Location.groupby('ConsentNo', as_index=False).agg({'CWMSZone': 'max'})
-Location_agg.rename(columns = {'max':'CWMSZone'})
+Location_agg.rename(columns = {'max':'CWMSZone'}, inplace=True)
 
 #old way
 # Location.sort_values(by = ['CWMSZone'], inplace  = True)
@@ -300,14 +301,14 @@ Location_agg.rename(columns = {'max':'CWMSZone'})
 FEVCol = [
         'RecordNo',
         'Activity',
-        'Full Effective Annual Volume (m3/year)',
+#        'Full Effective Annual Volume (m3/year)',
         'Allocation Block'
-#        'FullEffectiveAnnualVolume_m3year'
+        'FullEffectiveAnnualVolume_m3year'
         ]
 FEVColNames = {
         'RecordNo': 'ConsentNo',
-        'Full Effective Annual Volume (m3/year)' : 'FEVolume',
-#        'FullEffectiveAnnualVolume_m3year' : 'FEVolume',
+#        'Full Effective Annual Volume (m3/year)' : 'FEVolume',
+        'FullEffectiveAnnualVolume_m3year' : 'FEVolume',
         'Allocation Block' : 'AllocationBlock'
         }
 FEVImportFilter = {
@@ -341,21 +342,149 @@ WAP_agg.loc[WAP_agg['MonthCount'] > 1, 'MaxOfDifferentPeriodRate'] = WAP_agg['Ma
 
 
 # Water User Groups (SMG)
-WUGCol = [
-        
+SMGCol = [
+        'B1_ALT_ID',
+        'StatusType',
+        'HolderAddressFullName',
+        'MonOfficer'
         ]
-WUGColNames = {
-        
+SMGColNames = {
+        'B1_ALT_ID' : 'SMGNo',
+        'MonOfficer' : 'SMGMonOfficer'
         }
-WUGImportFilter = {
+SMGImportFilter = {
+       'StatusType' : ['OPEN']
+        }
+SMGServer = 'SQL2012Prod03'
+SMGDatabase = 'DataWarehouse'
+SMGTable = 'F_ACC_SelfManagementGroup'
+
+SMG = pdsql.mssql.rd_sql(
+                   server = SMGServer,
+                   database = SMGDatabase, 
+                   table = SMGTable,
+                   col_names = SMGCol,
+                   where_in = SMGImportFilter
+                   )
+SMG = SMG.drop_duplicates()
+SMG.rename(columns=SMGColNames, inplace=True)
+
+RelCol = [
+        'ParentRecordNo',
+        'ChildRecordNo'
+        ]
+RelColNames = {
+        'ParentRecordNo' : 'SMGNo',
+        'ChildRecordNo' : 'ConsentNo'
+        }
+RelImportFilter = {
        
         }
-WUGServer = 'SQL2012Prod03'
-WUGDatabase = 
-WUGTable = 
+RelServer = 'SQL2012Prod03'
+RelDatabase = 'DataWarehouse'
+RelTable = 'D_ACC_Relationships'
+
+Rel = pdsql.mssql.rd_sql(
+                   server = RelServer,
+                   database = RelDatabase, 
+                   table = RelTable,
+                   col_names = RelCol,
+                   where_in = RelImportFilter
+                   )
+Rel = Rel.drop_duplicates()
+Rel.rename(columns=RelColNames, inplace=True)
+
+WUG = pd.merge(SMG, Rel, on = 'SMGNo', how = 'inner')
+
+# Complexities
+temp = pd.merge(WAP, Consent, on = 'ConsentNo', how = 'inner')
+
+temp = temp.groupby(
+  ['WAP'], as_index=False
+  ).agg(
+          {
+            'MaxRateWAP' : 'max',
+            'ConsentNo' : pd.Series.nunique,
+            'HolderEcanID' : pd.Series.nunique,
+          }
+        )
+
+temp.rename(columns = 
+         {
+          'MaxRateWAP' :'MaxRateSharedWAP',
+          'ConsentNo' : 'RecordNoCount',
+          'HolderEcanID' : 'ECNoCount'
+                 },inplace=True)
+#still contains terminated
+# 8263 vs 8372
+
+MultipleWAP = temp[temp.RecordNoCount > 1]
+
+MultipleEC = temp[temp.ECNoCount > 1]
 
 
 
+# DataLogger Information
+DataLoggerCol = [
+        'ID',
+        'LoggerID',
+        'Well_no',
+        'DateDeinstalled',
+        'DateInstalled'
+        ]
+DataLoggerColNames = {
+        
+        }
+DataLoggerImportFilter = {
+        'DateDeinstalled' : np.nan,
+#        'LoggerID' : 'LoggerID' > 1
+        }
+DataLoggerServer = 'sql2012prod05'
+DataLoggerDatabase = 'wells'
+DataLoggerTable = 'EPO_Dataloggers'
+
+DataLogger = pdsql.mssql.rd_sql(
+                   server = DataLoggerServer,
+                   database = DataLoggerDatabase, 
+                   table = DataLoggerTable,
+                   col_names = DataLoggerCol
+#                   ,
+#                   where_in = DataLoggerImportFilter
+                   )
+
+DataLogger = DataLogger[DataLogger.LoggerID > 1]
+DataLogger = DataLogger[DataLogger['DateDeinstalled'].isnull()]
+
+
+# Telemetry Information
+TelemetryCol = [
+        'WAP',
+        'site',
+        'end_date'
+        ]
+TelemetryColNames = {
+        
+        }
+TelemetryImportFilter = {
+       'folder' : ['Telemetry']
+        }
+TelemetryDateCol = 'end_date'
+Telemetry_from_date = '2019-01-01'#TelemetryDate
+TelemetryServer = 'EDWProd01'
+TelemetryDatabase = 'Hydro'
+TelemetryTable = 'HilltopUsageSiteDataLog'
+
+Telemetry = pdsql.mssql.rd_sql(
+                   server = TelemetryServer,
+                   database = TelemetryDatabase, 
+                   table = TelemetryTable,
+                   col_names = TelemetryCol,
+                   where_in = TelemetryImportFilter,
+                   date_col = TelemetryDateCol,
+                   from_date = Telemetry_from_date
+                   )
+
+Telemetry.groupby(['WAP','site']).count().shape
 
 
 
@@ -364,6 +493,8 @@ x = pd.merge(Consent, FEV, on ='ConsentNo', how = 'left')
 z = pd.merge(WAP, Location, on ='ConsentNo', how = 'left')
 w = pd.merge(Consent, Location, on ='ConsentNo', how = 'left')
 v = pd.merge(Consent, WAP, on ='ConsentNo', how = 'inner')
+
+v.groupby(['ConsentNo','Activity']).aggregate('count').shape
 
 #test sizes
 Consent.shape
@@ -376,7 +507,8 @@ FEV['ConsentNo','Activity'].nunique()
 WAP_agg.shape
 WAP_agg['ConsentNo'].nunique()
 WAP['ConsentNo'].nunique()
-WAP['ConsentNo','Activity'].nunique()
+WAP.groupby(['ConsentNo','Activity']).aggregate('count').shape
+
 
 
 # Create Baseline
@@ -449,19 +581,7 @@ CampaignServer =
 CampaignDatabase = 
 CampaignTable = 
 
-# Telemetry Information
-TelemetryCol = [
-        
-        ]
-TelemetryColNames = {
-        
-        }
-TelemetryImportFilter = {
-       
-        }
-TelemetryServer = 
-TelemetryDatabase = 
-TelemetryTable = 
+
 
 # Meter Information
 MeterCol = [
