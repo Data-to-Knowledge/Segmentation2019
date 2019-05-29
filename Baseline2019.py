@@ -94,7 +94,6 @@ conditions = [
 choices = ['Child' , 'Parent']
 Consent['ParentorChild'] = np.select(conditions, choices, default = np.nan)
 
-
 choices2 = [Consent['ChildAuthorisations'] ,Consent['ParentAuthorisations']]
 Consent['ParentChildConsent'] = np.select(conditions, choices2, default = np.nan)
 
@@ -146,8 +145,10 @@ WAPMaster = list(set(WAP['WAP'].values.tolist()))
 
 #Aggregate WAP info to Consent level
 
+
+# Aggregate WAP table to consent, WAP, actvity tripplets
 # does this need to be by activity too?
-WAP_base = WAP.groupby(
+WAP_base_CAW = WAP.groupby(
   ['ConsentNo', 'WAP', 'Activity'], as_index = False
   ).agg(
             {
@@ -158,17 +159,18 @@ WAP_base = WAP.groupby(
             }
         )
 
-# 41 tripplets without multiple records
+# 41 tripplets with multiple records
 # 18 Tripplets without a pro Rata
 
-WAP_base.rename(columns={
+WAP_base_CAW.rename(columns={
          'MaxRateProRata': 'MutipleProRata',
          'MaxRateWAP' : 'MultipleRate',
          'WAPFromMonth' : 'MultipleFromMonth',
          'WAPToMonth': 'MultipleToMonth'
          }, inplace = True)
 
-WAP_agg = WAP.groupby(
+# Aggregate WAP table to consent level
+WAP_agg_C = WAP.groupby(
   ['ConsentNo'], as_index=False
   ).agg(
           {
@@ -179,76 +181,24 @@ WAP_agg = WAP.groupby(
           }
         )
 
-WAP_agg.rename(columns={
+WAP_agg_C.rename(columns={
         'MaxRateProRata' : 'CombinedRate',
         'MaxRateWAP' : 'MaxRate',
         'WAPToMonth' : 'ToMonthCount',
         'WAPFromMonth' : 'FromMonthCount'
         }, inplace=True)
 
-# twoways to calc column.
-#which one works?
-##option1 - doesn't work
-#df['new column name'] = df['df column_name'].apply(lambda x: 'value if condition is met' if x condition else 'value if condition is not met')
-#WAP_agg['MaxOfDifferentPeriodRate'] = WAP_agg['MonthCount'].apply(lambda x: WAP_agg['MaxRate'] if x > 1 else 'Null')
-
-#option2
-df.loc[df['A'] == df['B'], 'C'] = 0
-WAP_agg.loc[WAP_agg['MonthCount'] > 1, 'MaxOfDifferentPeriodRate'] = WAP_agg['MaxRate']
+# Calc Fields
+WAP_agg_C.loc[WAP_agg_C['MonthCount'] > 1, 'MaxOfDifferentPeriodRate'] = WAP_agg_C['MaxRate']
 
 #test table
-list(WAP_agg)
-WAP_agg.head()
+# list(WAP_agg_C)
+# WAP_agg_C.head()
 
-#test counts 
-Consent.shape
-WAP['ConsentNo'].nunique()
-WAP_agg.shape
-
-
-
-
-
-# x = Location.groupby(['ConsentNo'])['CWMSZone'].aggregate('count')
-
-# df.groupby('A').agg({'B': ['min', 'max'], 'C': 'sum'})
-
-# rich_inventory = (
-#     inventory
-#     .groupBy('id')
-#     .agg((F.min("firstyear").alias("Firstyear")),
-#          (F.max("lastyear").alias("Lastyear")),
-#          (F.count('core_element_flag').alias('all_element_count')),
-#          (F.sum('core_element_flag').alias('core_element_count')),
-#          (F.sum('precip_flag').alias('precip_flag'))
-#         )
-# )
-
-# # Group the data frame by month and item and extract a number of stats from each group
-# data.groupby(
-#     ['month', 'item']
-# ).agg(
-#     {
-#         # find the min, max, and sum of the duration column
-#         'duration': [min, max, sum],
-#          # find the number of network type entries
-#         'network_type': "count",
-#         # min, first, and number of unique dates per group
-#         'date': [min, 'first', 'nunique']
-#     }
-# )
-
-# grouped = data.groupby('month').agg("duration": [min, max, mean])
-# grouped.columns = grouped.columns.droplevel(level=0)
-# grouped.rename(columns={
-#     "min": "min_duration", "max": "max_duration", "mean": "mean_duration"
-# })
-# grouped.head()
-
-# grouped = data.groupby('month').agg("duration": [min, max, mean]) 
-# # Using ravel, and a string join, we can create better names for the columns:
-# grouped.columns = ["_".join(x) for x in grouped.columns.ravel()]
-
+# #test counts 
+# Consent.shape
+# WAP['ConsentNo'].nunique()
+# WAP_agg_C.shape
 
 
 # Location Information
@@ -264,8 +214,6 @@ LocationImportFilter = {
        'B1_ALT_ID' : ConsentMaster,
        'AttributeType' : ['CWMS Zone']
         }
-#LocationStart = 
-#LocationEnd = 
 LocationServer = 'SQL2012Prod03'
 LocationDatabase = 'DataWarehouse'
 LocationTable = 'F_ACC_SpatialAttributes2'
@@ -285,14 +233,9 @@ x2 = x[x > 1] # 54 consents with more than one zone
 x2.max() # 10
 x2.mean() # 2.6
 
-# data.groupby('month', as_index=False).agg({"duration": "sum"})
-# should work better
-Location_agg = Location.groupby('ConsentNo', as_index=False).agg({'CWMSZone': 'max'})
-Location_agg.rename(columns = {'max':'CWMSZone'}, inplace=True)
-
-#old way
-# Location.sort_values(by = ['CWMSZone'], inplace  = True)
-# Location = Location.drop_duplicates(subset = 'ConsentNo', keep = 'last') #last in alphabet matches MAX() from SQL
+# Aggregate Location table to consent level
+Location_agg_C = Location.groupby('ConsentNo', as_index=False).agg({'CWMSZone': 'max'})
+Location_agg_C.rename(columns = {'max':'CWMSZone'}, inplace=True)
 # two consents w/o locations
 # CRC185906
 # CRC191696
@@ -307,6 +250,7 @@ FEVCol = [
         ]
 FEVColNames = {
         'RecordNo': 'ConsentNo',
+        'Activity',
 #        'Full Effective Annual Volume (m3/year)' : 'FEVolume',
         'FullEffectiveAnnualVolume_m3year' : 'FEVolume',
         'Allocation Block' : 'AllocationBlock'
@@ -332,10 +276,8 @@ FEV = FEV.drop_duplicates()
 FEV.rename(columns=FEVColNames, inplace=True)
 
 
-#truely or still AV?
+# Calculate fields
 FEV.loc[FEV['AllocationBlock'] == 'Adapt.Vol','AdMan'] = 'Adaptive Managment' 
-
-WAP_agg.loc[WAP_agg['MonthCount'] > 1, 'MaxOfDifferentPeriodRate'] = WAP_agg['MaxRate']
 
 # FEV = FEV.drop_duplicates(subset = ['ConsentNo', 'Activity','FEV'])
 #duplicate CRC b/c of SW/ GW --- keep? - it gets grouped to CRC only later....
@@ -396,7 +338,7 @@ Rel.rename(columns=RelColNames, inplace=True)
 
 WUG = pd.merge(SMG, Rel, on = 'SMGNo', how = 'inner')
 
-# Complexities
+# Calculate Consent Complexities
 temp = pd.merge(WAP, Consent, on = 'ConsentNo', how = 'inner')
 
 temp = temp.groupby(
@@ -418,9 +360,9 @@ temp.rename(columns =
 #still contains terminated
 # 8263 vs 8372
 
-MultipleWAP = temp[temp.RecordNoCount > 1]
+MultipleWAP_agg_W = temp[temp.RecordNoCount > 1]
 
-MultipleEC = temp[temp.ECNoCount > 1]
+MultipleEC_agg_W = temp[temp.ECNoCount > 1]
 
 
 
@@ -484,7 +426,116 @@ Telemetry = pdsql.mssql.rd_sql(
                    from_date = Telemetry_from_date
                    )
 
+Telemetry['Telemetered'] = 1
 Telemetry.groupby(['WAP','site']).count().shape
+
+# Well Details
+WellDetailsCol = [
+        'Well_No',
+        'Status',
+        'GWuseAlternateWell'
+        ]
+WellDetailsColNames = {
+        'Well_No' : 'WAP',
+        'Status' :'WellStatus'
+        }
+WellDetailsImportFilter = {
+       
+        }
+WellDetailsServer = 'SQL2012prod05'
+WellDetailsDatabase = 'Wells'
+WellDetailsTable = 'Well_Details'
+
+WellDetails = pdsql.mssql.rd_sql(
+                   server = WellDetailsServer,
+                   database = WellDetailsDatabase, 
+                   table = WellDetailsTable,
+                   col_names = WellDetailsCol,
+                   where_in = WellDetailsImportFilter,
+                   )
+WellDetails.rename(columns=WellDetailsColNames, inplace=True)
+
+
+# Waiver
+WaiverCol = [
+        'Well_No',
+        'EPO_LAST_UPDATE',
+        'WM_Tmp_Waiver',
+        'DateInstalled',
+        'GWuseAlternateWell'
+        ]
+WaiverColNames = {
+        'Well_No' : 'WAP'
+        }
+WaiverImportFilter = {
+       
+        }
+WaiverServer = 'SQL2012prod05'
+WaiverDatabase = 'Wells'
+WaiverTable = 'EPO_WELL_DETAILS'
+
+Waiver = pdsql.mssql.rd_sql(
+                   server = WaiverServer,
+                   database = WaiverDatabase, 
+                   table = WaiverTable,
+                   col_names = WaiverCol,
+                   where_in = WaiverImportFilter,
+                   )
+Waiver.rename(columns=WaiverColNames, inplace=True)
+
+  # ,(Case when ([WM_Tmp_Waiver]=1) then 1 else 0 end) as Waiver
+  # ,(Case when ([WM_Tmp_Waiver]=1 and [EPO_LAST_UPDATE] is not null) then [EPO_LAST_UPDATE] else NULL end) as WaiverEditDate
+  # ,(Case when (WD.[Status]='Active') THEN 1 else 0 end) as WellStatus    --20181130 CHANGED!!![Well_Status]='AE'
+  # ,(Case when (tel.wap is not null) then 1 else 0 end) as Telemetered
+
+conditions = [
+        EPO.WM_Tmp_Waiver == 1 & EPO.EPO_LAST_UPDATE isnotnull,
+               ]
+choices = [EPO.EPO_LAST_UPDATE]
+Consent['ParentorChild'] = np.select(conditions, choices, default = np.nan)
+EPO['Waiver'] =np.select(EPO['WM_Tmp_Waiver'] == 1, 1, default = 0)
+WellDetails['WellStatus'] =np.select(WellDetails['Status'] == 'Active', 1, default = 0)
+
+# Create WAPDetails table
+WAPDetails = pd.merge(WellDetails, DataLogger, on = 'WAP', how = 'left')
+WAPDetails = pd.merge(WAPDetails, EPO, on = 'WAP', how = 'left')
+WAPDetails = pd.merge(WAPDetails, Telemetry, on = 'WAP', how = 'left')
+
+  # ,(Case when [GWuseAlternateWell] <> WD.Well_No then 1 else 0 end) as SharedMeter
+
+WAPDetails['SharedMeter'] = np.select(WAPDetails['WAP'] == WAPDetails['GWuseAlternateWell'], 1, default = 0)
+
+# Select
+#   distinct (WD.Well_No)
+#   ,COUNT(DL.ID) as CountDataloggers
+#   ,MIN(DateInstalled) as MinDataLogDate
+#   ,MAX(DateInstalled) as MaxDataLogDate
+
+WAPDetails_agg_W = WAPDetails.groupby(
+  ['WAP'], as_index=False
+  ).agg(
+          {
+          'ID': 'count',
+          'DateInstalled' : ['min', 'max']
+          }
+        )
+
+WAPDetails_agg_W.columns = WAPDetails_agg_W.columns.droplevel(1)
+
+WAPDetails_agg_W.rename(columns = 
+         {
+          'ID' :'CountDataloggers',
+          'min' : 'MinDataLogDate',
+          'max' : 'MaxDataLogDate'
+                 },inplace=True)
+
+
+
+
+
+
+
+
 
 
 
@@ -498,14 +549,14 @@ v.groupby(['ConsentNo','Activity']).aggregate('count').shape
 
 #test sizes
 Consent.shape
-Location_agg.shape
-Location_agg['ConsentNo'].nunique()
+Location_agg_C.shape
+Location_agg_C['ConsentNo'].nunique()
 Location['ConsentNo'].nunique()
 FEV.shape
 FEV['ConsentNo'].nunique()
 FEV['ConsentNo','Activity'].nunique()
-WAP_agg.shape
-WAP_agg['ConsentNo'].nunique()
+WAP_agg_C.shape
+WAP_agg_C['ConsentNo'].nunique()
 WAP['ConsentNo'].nunique()
 WAP.groupby(['ConsentNo','Activity']).aggregate('count').shape
 
@@ -515,16 +566,16 @@ WAP.groupby(['ConsentNo','Activity']).aggregate('count').shape
 #does it sep acitivity on wap/consent?
 # do locations have activity?
 #option1
-Baseline = pd.merge(WAP_base, Consent, on = 'ConsentNo', how = 'inner')
-Baseline = pd.merge(Consent, Location_agg, on = 'ConsentNo', how = 'left')
+Baseline = pd.merge(WAP_base_CAW, Consent, on = 'ConsentNo', how = 'inner')
+Baseline = pd.merge(Consent, Location_agg_C, on = 'ConsentNo', how = 'left')
 Baseline = pd.merge(Baseline, FEV, on = ['ConsentNo','Activity'], how = 'left')
-Baseline = pd.merge(Baseline, WAP_agg, on =['ConsentNo','Activity'], how = 'left')
+Baseline = pd.merge(Baseline, WAP_agg_C, on =['ConsentNo','Activity'], how = 'left')
 
 #option 2
-Consent_base = pd.merge(Consent, Location_agg, on = 'ConsentNo', how = 'left')
-Consent_base = pd.merge(Consent_base, WAP_agg, on = 'ConsentNo', how = 'left')
-WAP_base = pd.merge(WAP_base, FEV, on = ['ConsentNo','Activity'], how = 'left')
-Baseline = pd.merge(WAP_base, Consent_base, on = 'ConsentNo', how = 'inner')
+Consent_base = pd.merge(Consent, Location_agg_C, on = 'ConsentNo', how = 'left')
+Consent_base = pd.merge(Consent_base, WAP_agg_C, on = 'ConsentNo', how = 'left')
+WAP_base_CAW = pd.merge(WAP_base_CAW, FEV, on = ['ConsentNo','Activity'], how = 'left')
+Baseline = pd.merge(WAP_base_CAW, Consent_base, on = 'ConsentNo', how = 'inner')
 
 TempConsent2 = Baseline
 
@@ -648,3 +699,15 @@ InspectionTable =
 # Output Totals
 
 # Output Inspections
+© 2019 GitHub, Inc.
+Terms
+Privacy
+Security
+Status
+Help
+Contact GitHub
+Pricing
+API
+Training
+Blog
+About
