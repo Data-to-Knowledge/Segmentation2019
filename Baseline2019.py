@@ -21,7 +21,8 @@ WAPMaster = []
 TermDate = '2018-10-01'
 TermDate = datetime.strptime(TermDate, '%Y-%m-%d')
 TelemetryDate = '2019-01-01'
-
+InspectionStartDate = '2018-07-13'
+InspectionEndDate = '2019-11-01'
 
 
 # Set Table Variables
@@ -410,8 +411,8 @@ TelemetryColNames = {
 TelemetryImportFilter = {
        'folder' : ['Telemetry']
         }
-TelemetryDateCol = 'end_date'
-Telemetry_from_date = '2019-01-01'#TelemetryDate
+Telemetry_date_col = 'end_date'
+Telemetry_from_date = TelemetryDate
 TelemetryServer = 'EDWProd01'
 TelemetryDatabase = 'Hydro'
 TelemetryTable = 'HilltopUsageSiteDataLog'
@@ -422,7 +423,7 @@ Telemetry = pdsql.mssql.rd_sql(
                    table = TelemetryTable,
                    col_names = TelemetryCol,
                    where_in = TelemetryImportFilter,
-                   date_col = TelemetryDateCol,
+                   date_col = Telemetry_date_col,
                    from_date = Telemetry_from_date
                    )
 
@@ -617,7 +618,7 @@ choices = [Baseline['MaxRateWAP'],Baseline['MaxRateWAP']]
 Baseline['FiveLS'] = np.select(conditions, choices, default = np.nan)
                            
                            
-
+#
 # Campaign Participants
 CampaignCol = [
         
@@ -650,7 +651,17 @@ MeterTable =
 
 # Water Use Summary
 SummaryCol = [
-        
+        'ErrorMsg',
+        'TotalMissingRecord',
+        'TotalVolumeAboveRestriction',
+        'TotalDaysAboveRestriction',
+        'PercentAnnualVolumeTaken',
+        'MaxVolumeAboveNDayVolume',
+        'MaxConsecutiveDayVolume',
+        'NumberOfConsecutiveDays',
+        'MaxTakeRate',
+        'MaxRateTaken',
+        'TotalMissingRecord'
         ]
 SummaryColNames = {
         
@@ -659,22 +670,169 @@ SummaryImportFilter = {
        
         }
 SummaryServer = 'SQL2012Prod03'
-SummaryDatabase = 
-SummaryTable = 
+SummaryDatabase =  Hilltop
+SummaryTable = ComplianceSummary
+
+Summary = pdsql.mssql.rd_sql(
+                   server = SummaryServer,
+                   database = SummaryDatabase, 
+                   table = SummaryTable,
+                   col_names = SummaryCol,
+                   where_in = SummaryImportFilter,
+                   )
+Summary.rename(columns=SummaryColNames, inplace=True)
+
+#SQL
+  distinct Consent
+  ,([master].[dbo].[fRemoveExtraCharacters](ErrorMsg)) as ErrorMessage
+  ,[TotalMissingRecord] 
+  # ,(Case when ([TotalVolumeAboveRestriction] is null or [TotalVolumeAboveRestriction] = 0 or [TotalDaysAboveRestriction] is null) then 0 else 
+  #   (case when ([TotalVolumeAboveRestriction]>100 and [TotalDaysAboveRestriction] > 2) then 100 else 1 end) end) as LFNC
+  # ,(case when ([PercentAnnualVolumeTaken] <=100 or [PercentAnnualVolumeTaken] is null ) then 0 else 
+  #   (case when ([PercentAnnualVolumeTaken] >200 ) then 2000 else 
+  #     (case when ([PercentAnnualVolumeTaken] >100 ) then 100 else 1 end)end)end) as AVNC
+  # ,(case when ([MaxVolumeAboveNDayVolume] is null or (([MaxVolumeAboveNDayVolume]+[MaxConsecutiveDayVolume])/[MaxConsecutiveDayVolume]*100)<=100) then 0 else
+  #   (case when (([NumberOfConsecutiveDays]=1 and (([MaxVolumeAboveNDayVolume]+[MaxConsecutiveDayVolume])/[MaxConsecutiveDayVolume]*100)>105) or 
+  #     ([NumberOfConsecutiveDays]>1 and (([MaxVolumeAboveNDayVolume]+[MaxConsecutiveDayVolume])/[MaxConsecutiveDayVolume]*100)>120) ) then 100 else 
+  #   1 end)end) as CDNC
+  # ,(case when ([MaxTakeRate] is null or [MaxRateTaken] is null or ([MaxRateTaken]/[MaxTakeRate])*100<=100 ) then 0 else 
+  #   (case when (([MaxRateTaken]/[MaxTakeRate])*100>105) then 100 else 1 end) end) as RoTNC
+
+  # ,(case when ([TotalMissingRecord] is null or [TotalMissingRecord] = 0) then 0 else
+  #     (case when ([TotalMissingRecord] > 0 and [TotalMissingRecord] <= 10) then 5 else 
+  #   (case when ([TotalMissingRecord] > 100) then 10000 else 5000 end)end)end) as MRNC
+
+
+
+#MRNC
+HighThresholdMR = 200
+LowThresholdMR = 10
+HighRiskMR = 10000
+MedRiskMR = 5
+LowRiskMR = 0
+OtherRiskMR = 5000
+
+conditions = [
+    (Summary.TotalMissingRecord == np.nan) | (Summary.TotalMissingRecord == 0),
+    (Summary.TotalMissingRecord > HighThresholdMR)
+    (Summary.TotalMissingRecord > 0) & (Summary.TotalMissingRecord <= LowThresholdMR),
+             ]
+choices = [LowRiskMR, HighRiskMR, MedRiskAV]
+Summary['MRNC'] = np.select(conditions, choices, default = OtherRiskAV)
+
+
+# CDNC
+HighPercentThresholdCDV = 105
+LowPercentThresholdCDV = 100
+HighRiskCDV = 100
+MedRiskCDV = 1
+LowRiskCDV = 0
+
+Summary['PercentOverCDV'] = (Summary.MaxVolumeAboveNDayVolume+Summary.MaxConsecutiveDayVolume)/Summary.MaxConsecutiveDayVolume*100
+conditions = [
+    (Summary.MaxVolumeAboveNDayVolume == np.nan) | (Summary.PercentOverCDV <= LowPercentThresholdCDV),
+    ((Summary.NumberOfConsecutiveDays == 1) & (Summary.PercentOverCDV > HighPercentThresholdCDV)) | ((Summary.NumberOfConsecutiveDays > 1) & (Summary.PercentOverCDV > 120))
+             ]
+choices = [LowRiskCDV,HighRiskCDV]
+Summary['CDNC'] = np.select(conditions, choices, default = MedRiskCDV)
+
+
+#RoTNC
+HighPercentThresholdRoT = 105
+LowPercentThresholdRoT = 100
+HighRiskRoT = 100
+MedRiskRoT = 1
+LowRiskRoT = 0
+
+Summary['PercentOverRoT'] = (Summary.MaxRateTaken/Summary.MaxTakeRate)*100
+
+conditions = [
+    (Summary.MaxTakeRate == np.nan) | (Summary.MaxRateTaken == np.nan) | (Summary.PercentOverRoT<= LowPercentThresholdRoT),
+    ((Summary.MaxRateTaken/Summary.MaxTakeRate)*100 > HighPercentThresholdRoT)
+             ]
+choices = [LowRiskRoT,HighRiskRoT]
+Summary['RoTNC'] = np.select(conditions, choices, default = MedRiskRoT)
+
+
+#AVNC
+HighVolumeThresholdAV = 200
+LowVolumeThresholdAV = 100
+HighRiskAV = 2000
+MedRiskAV = 100
+LowRiskAV = 0
+OtherRiskAV = 1
+
+conditions = [
+    (Summary.PercentAnnualVolumeTaken == np.nan) | (Summary.PercentAnnualVolumeTaken <= LowVolumeThresholdAV),
+    (Summary.PercentAnnualVolumeTaken > HighVolumeThresholdAV),
+    (Summary.PercentAnnualVolumeTaken > LowVolumeThresholdAV) & (Summary.PercentAnnualVolumeTaken <= HighVolumeThresholdAV)
+             ]
+choices = [LowRiskAV, HighRiskAV, MedRiskAV]
+Summary['AVNC'] = np.select(conditions, choices, default = OtherRiskAV)
+
+
+#LFNC
+VolumeThresholdLF = 100
+DaysThresholdLF = 2
+HighRiskLF = 100
+MedRiskLF = 1
+LowRiskLF = 0
+
+conditions = [
+    (Summary.TotalVolumeAboveRestriction == np.nan) | (Summary.TotalVolumeAboveRestriction == 0) | (Summary.TotalDaysAboveRestriction == np.nan),
+    (Summary.TotalVolumeAboveRestriction > VolumeThresholdLF) & (Summary.TotalDaysAboveRestriction > DaysThresholdLF)
+             ]
+choices = [LowRiskLF,HighRiskLF]
+Summary['LFNC'] = np.select(conditions, choices, default = MedRiskLF)
+
+
+
 
 # Inspection History
 InspectionCol = [
-        
+        'InspectionID',
+        'B1_ALT_ID',
+        'Subtype',
+        'PARENT_InspectionID',
+        'CHILD_InspectionID',
+        'InspectionStatus',
+        'NextInspectionDate'
         ]
 InspectionColNames = {
-        
+        'B1_ALT_ID' : 'ConsentNo',
+        'Subtype' : 'InspectionSubtype',
         }
 InspectionImportFilter = {
-       
+        'RecordNo' : ConsentMaster
         }
+Inspection_date_col = 'NextInspectionDate' 
+Inspection_from_date = InspectionStartDate
+Inspection_to_date = InspectionEndDate
 InspectionServer = 'SQL2012Prod03'
 InspectionDatabase = 'DataWarehouse'
-InspectionTable = 
+InspectionTable = 'D_ACC_Inspections '
+
+
+Inspection = pdsql.mssql.rd_sql(
+                   server = InspectionServer,
+                   database = InspectionDatabase, 
+                   table = InspectionTable,
+                   col_names = InspectionCol,
+                   where_in = InspectionImportFilter,
+                   date_col = Inspection_date_col,
+                   from_date = Inspection_from_date
+                   )
+
+left outer join
+  DataWarehouse.[dbo].[D_ACC_InspectionRelationships] rel2
+where 
+  ins.Subtype = 'Water Use Data' 
+  and
+  ins.NextInspectionDate >='2018-07-13 00:00:00.000' --had a look at data and chose start and stop date based on that.
+  and
+  ins.NextInspectionDate <='2019-11-01 00:00:00.000' 
+  and
+  rel2.[PARENT_InspectionID] is null --resolved duplicates (23 consents)
 
 
 # Import Tables
@@ -687,7 +845,35 @@ InspectionTable =
 # Inspection History
 
 
+------data extract Hydro db
 
+SELECT  
+  Distinct [ExtSiteID]
+  ,COUNT (Distinct([DateTime])) as DayCount
+  ,Max([DateTime]) as MaxDate
+into #CountWAPDays
+FROM 
+  [EDWProd01].[Hydro].[dbo].[TSDataNumericDaily]
+where 
+  [DatasetTypeID] in (9,12) 
+  and 
+  [DateTime] between '2018-07-01'and '2019-06-30'
+group by 
+  [ExtSiteID]
+
+  SELECT 
+  Wap.RecordNo
+  ,COUNT(DISTINCT([ExtSiteID])) as SiteCount
+    ,SUM([DayCount]) as DayCountSum
+  ,MAX([MaxDate]) as MaxDate
+into #DayCountSum
+
+FROM 
+  #CountWAPDays WDC 
+  inner join  [DataWarehouse].[dbo].[D_ACC_Act_Water_TakeWaterWAPAlloc] Wap
+  on WDC.ExtSiteID=wap.WAP
+where Wap.Activity like 'Take%' 
+group by Wap.RecordNo
 # Calc complications
 
 # Calc Risk
@@ -711,3 +897,4 @@ API
 Training
 Blog
 About
+© 2019 GitHub, Inc.
