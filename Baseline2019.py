@@ -109,7 +109,10 @@ WAPCol = [
         'Max Rate Pro Rata (l/s)',
         'Max Rate for WAP (l/s)',
         'From Month',
-        'To Month'        
+        'To Month'          
+        # 'MaxRateForWAP_ls',
+        # 'FromMonth',
+        # 'ToMonth'       
         ]
 WAPColNames = {
         'RecordNo' : 'ConsentNo',
@@ -117,6 +120,9 @@ WAPColNames = {
         'Max Rate for WAP (l/s)' : 'MaxRateWAP',
         'From Month' : 'WAPFromMonth',
         'To Month' : 'WAPToMonth'
+#        'MaxRateForWAP_ls' : 'MaxRateWAP',
+#        'FromMonth' : 'WAPFromMonth',
+#        'ToMonth' : 'WAPToMonth'
         }
 WAPImportFilter = {
         'Activity' : ['Take Surface Water','Take Groundwater'],
@@ -124,9 +130,9 @@ WAPImportFilter = {
         }
 WAPwhere_op = 'AND'
 WAPServer = 'SQL2012Prod03'
-#WAPServer = 'SQL2012Test01'
 WAPDatabase = 'DataWarehouse'
 WAPTable = 'D_ACC_Act_Water_TakeWaterWAPAlloc'
+#WAPTable = 'D_ACC_Act_Water_TakeWaterWAPAllocation'
 
 WAP = pdsql.mssql.rd_sql(
                    server = WAPServer,
@@ -137,12 +143,12 @@ WAP = pdsql.mssql.rd_sql(
                    where_in = WAPImportFilter
                    )
 WAP.nunique()
-WAP = WAP.drop_duplicates()
-WAP.nunique()
 WAP.rename(columns=WAPColNames, inplace=True)
 
 WAPMaster = list(set(WAP['WAP'].values.tolist()))
 
+
+#only two off
 
 #Aggregate WAP info to Consent level
 
@@ -190,7 +196,7 @@ WAP_agg_C.rename(columns={
         }, inplace=True)
 
 # Calc Fields
-WAP_agg_C.loc[WAP_agg_C['MonthCount'] > 1, 'MaxOfDifferentPeriodRate'] = WAP_agg_C['MaxRate']
+WAP_agg_C.loc[WAP_agg_C['ToMonthCount'] > 1, 'MaxOfDifferentPeriodRate'] = WAP_agg_C['MaxRate']
 
 #test table
 # list(WAP_agg_C)
@@ -231,6 +237,7 @@ Location.rename(columns=LocationColNames, inplace=True)
 
 x = Location.groupby(['ConsentNo'])['CWMSZone'].aggregate('count')
 x2 = x[x > 1] # 54 consents with more than one zone
+x2.shape[0] #55
 x2.max() # 10
 x2.mean() # 2.6
 
@@ -242,46 +249,55 @@ Location_agg_C.rename(columns = {'max':'CWMSZone'}, inplace=True)
 # CRC191696
 
 # Full Effective Volume
-FEVCol = [
-        'RecordNo',
+ConsentDetailsCol = [
+        'RecordNumber',
         'Activity',
+#        'RecordNo',        
 #        'Full Effective Annual Volume (m3/year)',
-        'Allocation Block'
-        'FullEffectiveAnnualVolume_m3year'
+#        'Allocation Block'
+        'FullAnnualVolume_m3year',
+        'AllocationBlock'
         ]
-FEVColNames = {
-        'RecordNo': 'ConsentNo',
-        'Activity',
+ConsentDetailsColNames = {
+        'RecordNumber': 'ConsentNo',
+#        'RecordNo': 'ConsentNo',       
 #        'Full Effective Annual Volume (m3/year)' : 'FEVolume',
-        'FullEffectiveAnnualVolume_m3year' : 'FEVolume',
-        'Allocation Block' : 'AllocationBlock'
+#        'Allocation Block' : 'AllocationBlock'        
+        'FullAnnualVolume_m3year' : 'FEVolume',
+        'AllocationBlock' : 'AllocationBlock'   
         }
-FEVImportFilter = {
+ConsentDetailsImportFilter = {
         'Activity' : ['Take Surface Water','Take Groundwater'],
-        'RecordNo' : ConsentMaster
+        'RecordNumber' : ConsentMaster       
+#        'RecordNo' : ConsentMaster
         }
 #FEVStart = 
 #FEVEnd = 
-FEVServer = 'SQL2012Prod03'
-FEVDatabase = 'DataWarehouse'
-FEVTable = 'D_ACC_Act_Water_TakeWaterAllocData'
+ConsentDetailsServer = 'SQL2012Prod03'
+ConsentDetailsDatabase = 'DataWarehouse'
+ConsentDetailsTable = 'D_ACC_Act_Water_TakeWaterPermitVolume'#'D_ACC_Act_Water_TakeWaterAllocData'
 
-FEV = pdsql.mssql.rd_sql(
-                   server = FEVServer,
-                   database = FEVDatabase, 
-                   table = FEVTable,
-                   col_names = FEVCol,
-                   where_in = FEVImportFilter
+ConsentDetails = pdsql.mssql.rd_sql(
+                   server = ConsentDetailsServer,
+                   database = ConsentDetailsDatabase, 
+                   table = ConsentDetailsTable,
+                   col_names = ConsentDetailsCol,
+                   where_in = ConsentDetailsImportFilter
                    )
-FEV = FEV.drop_duplicates()
-FEV.rename(columns=FEVColNames, inplace=True)
+ConsentDetails = ConsentDetails.drop_duplicates()
+ConsentDetails.rename(columns=ConsentDetailsColNames, inplace=True)
 
 
 # Calculate fields
-FEV.loc[FEV['AllocationBlock'] == 'Adapt.Vol','AdMan'] = 'Adaptive Managment' 
+ConsentDetails.loc[ConsentDetails['AllocationBlock'] == 'Adapt.Vol','AdMan'] = 'Adaptive Managment' 
 
 # FEV = FEV.drop_duplicates(subset = ['ConsentNo', 'Activity','FEV'])
 #duplicate CRC b/c of SW/ GW --- keep? - it gets grouped to CRC only later....
+
+TEST_TempConsent2 = pd.merge(Consent, WAP, on = ['ConsentNo'], how = 'inner')
+TEST_TempConsent2 = pd.merge(TEST_TempConsent2, ConsentDetails, on = ['ConsentNo','Activity'], how = 'left')
+TEST_TempConsent2 = pd.merge(TEST_TempConsent2, Location, on = ['ConsentNo'], how = 'left')
+TEST_TempConsent2 = TEST_TempConsent2.groupby(['ConsentNo','Activity'], as_index = False).count()
 
 
 # Water User Groups (SMG)
@@ -337,7 +353,8 @@ Rel = pdsql.mssql.rd_sql(
 Rel = Rel.drop_duplicates()
 Rel.rename(columns=RelColNames, inplace=True)
 
-WUG = pd.merge(SMG, Rel, on = 'SMGNo', how = 'inner')
+TEST_WUG = pd.merge(SMG, Rel, on = 'SMGNo', how = 'inner')
+# Matches SQL
 
 # Calculate Consent Complexities
 temp = pd.merge(WAP, Consent, on = 'ConsentNo', how = 'inner')
@@ -362,8 +379,10 @@ temp.rename(columns =
 # 8263 vs 8372
 
 MultipleWAP_agg_W = temp[temp.RecordNoCount > 1]
+# matches SQL
 
 MultipleEC_agg_W = temp[temp.ECNoCount > 1]
+# matches SQL
 
 
 
@@ -373,7 +392,7 @@ DataLoggerCol = [
         'LoggerID',
         'Well_no',
         'DateDeinstalled',
-        'DateInstalled'
+        'DateInstalled',
         ]
 DataLoggerColNames = {
         
@@ -397,6 +416,7 @@ DataLogger = pdsql.mssql.rd_sql(
 
 DataLogger = DataLogger[DataLogger.LoggerID > 1]
 DataLogger = DataLogger[DataLogger['DateDeinstalled'].isnull()]
+# Matches SQL into#DataLogger 
 
 
 # Telemetry Information
@@ -430,6 +450,12 @@ Telemetry = pdsql.mssql.rd_sql(
 Telemetry['Telemetered'] = 1
 Telemetry.groupby(['WAP','site']).count().shape
 
+#TEST_Telemetry = pd.DataFrame(Telemetry['WAP'].unique(), columns='WAP')
+#TEST_Telemetry.rename(columns = 'WAP', inplace=True)
+#TEST_Telemetry.sort_values(by = ['WAP'], inplace=True)
+#x= Telemetry.loc[Telemetry['WAP']]
+#there is one null
+
 # Well Details
 WellDetailsCol = [
         'Well_No',
@@ -461,9 +487,7 @@ WellDetails.rename(columns=WellDetailsColNames, inplace=True)
 WaiverCol = [
         'Well_No',
         'EPO_LAST_UPDATE',
-        'WM_Tmp_Waiver',
-        'DateInstalled',
-        'GWuseAlternateWell'
+        'WM_Tmp_Waiver'
         ]
 WaiverColNames = {
         'Well_No' : 'WAP'
@@ -484,17 +508,19 @@ Waiver = pdsql.mssql.rd_sql(
                    )
 Waiver.rename(columns=WaiverColNames, inplace=True)
 
+
+
   # ,(Case when ([WM_Tmp_Waiver]=1) then 1 else 0 end) as Waiver
   # ,(Case when ([WM_Tmp_Waiver]=1 and [EPO_LAST_UPDATE] is not null) then [EPO_LAST_UPDATE] else NULL end) as WaiverEditDate
   # ,(Case when (WD.[Status]='Active') THEN 1 else 0 end) as WellStatus    --20181130 CHANGED!!![Well_Status]='AE'
   # ,(Case when (tel.wap is not null) then 1 else 0 end) as Telemetered
 
 conditions = [
-        EPO.WM_Tmp_Waiver == 1 & EPO.EPO_LAST_UPDATE isnotnull,
+        (WellDetails.WM_Tmp_Waiver == 1) & (WellDetails.EPO_LAST_UPDATE == EPO.notnull(data["EPO_LAST_UPDATE"]))
                ]
-choices = [EPO.EPO_LAST_UPDATE]
+choices = [WellDetails.EPO_LAST_UPDATE]
 Consent['ParentorChild'] = np.select(conditions, choices, default = np.nan)
-EPO['Waiver'] =np.select(EPO['WM_Tmp_Waiver'] == 1, 1, default = 0)
+WellDetails['Waiver'] =np.select(WellDetails['WM_Tmp_Waiver'] == 1, 1, default = 0)
 WellDetails['WellStatus'] =np.select(WellDetails['Status'] == 'Active', 1, default = 0)
 
 # Create WAPDetails table
@@ -651,6 +677,7 @@ MeterTable =
 
 # Water Use Summary
 SummaryCol = [
+        'Consent',
         'ErrorMsg',
         'TotalMissingRecord',
         'TotalVolumeAboveRestriction',
@@ -660,18 +687,17 @@ SummaryCol = [
         'MaxConsecutiveDayVolume',
         'NumberOfConsecutiveDays',
         'MaxTakeRate',
-        'MaxRateTaken',
-        'TotalMissingRecord'
+        'MaxRateTaken'
         ]
 SummaryColNames = {
-        
+        'Consent' : 'ConsentNo'
         }
 SummaryImportFilter = {
        
         }
 SummaryServer = 'SQL2012Prod03'
-SummaryDatabase =  Hilltop
-SummaryTable = ComplianceSummary
+SummaryDatabase =  'Hilltop'
+SummaryTable = 'ComplianceSummary'
 
 Summary = pdsql.mssql.rd_sql(
                    server = SummaryServer,
@@ -683,9 +709,9 @@ Summary = pdsql.mssql.rd_sql(
 Summary.rename(columns=SummaryColNames, inplace=True)
 
 #SQL
-  distinct Consent
-  ,([master].[dbo].[fRemoveExtraCharacters](ErrorMsg)) as ErrorMessage
-  ,[TotalMissingRecord] 
+#  distinct Consent
+#  ,([master].[dbo].[fRemoveExtraCharacters](ErrorMsg)) as ErrorMessage
+#  ,[TotalMissingRecord] 
   # ,(Case when ([TotalVolumeAboveRestriction] is null or [TotalVolumeAboveRestriction] = 0 or [TotalDaysAboveRestriction] is null) then 0 else 
   #   (case when ([TotalVolumeAboveRestriction]>100 and [TotalDaysAboveRestriction] > 2) then 100 else 1 end) end) as LFNC
   # ,(case when ([PercentAnnualVolumeTaken] <=100 or [PercentAnnualVolumeTaken] is null ) then 0 else 
@@ -703,9 +729,18 @@ Summary.rename(columns=SummaryColNames, inplace=True)
   #   (case when ([TotalMissingRecord] > 100) then 10000 else 5000 end)end)end) as MRNC
 
 
+conditions = [
+        Consent.B1_APPL_STATUS == 'Terminated - Replaced',
+        ((Consent.B1_APPL_STATUS == 'Issued - Active') |
+                (Consent.B1_APPL_STATUS == 'Issued - s124 Continuance')) &
+            (Consent.fmDate > TermDate),
+               ]
+choices = ['Child' , 'Parent']
+Consent['ParentorChild'] = np.select(conditions, choices, default = np.nan)
 
-#MRNC
-HighThresholdMR = 200
+
+#MRNC - zeros vs Nulls. SQL says 0 is null Python says false
+HighThresholdMR = 100
 LowThresholdMR = 10
 HighRiskMR = 10000
 MedRiskMR = 5
@@ -713,12 +748,13 @@ LowRiskMR = 0
 OtherRiskMR = 5000
 
 conditions = [
-    (Summary.TotalMissingRecord == np.nan) | (Summary.TotalMissingRecord == 0),
-    (Summary.TotalMissingRecord > HighThresholdMR)
-    (Summary.TotalMissingRecord > 0) & (Summary.TotalMissingRecord <= LowThresholdMR),
+    (pd.isnull(Summary['TotalMissingRecord'])) | (Summary.TotalMissingRecord == 0),
+    (Summary.TotalMissingRecord > HighThresholdMR),
+    (Summary.TotalMissingRecord > 0) & (Summary.TotalMissingRecord <= LowThresholdMR)
              ]
-choices = [LowRiskMR, HighRiskMR, MedRiskAV]
-Summary['MRNC'] = np.select(conditions, choices, default = OtherRiskAV)
+choices = [LowRiskMR, HighRiskMR, MedRiskMR]
+Summary['MRNC'] = np.select(conditions, choices, default = OtherRiskMR)
+
 
 
 # CDNC
@@ -730,7 +766,7 @@ LowRiskCDV = 0
 
 Summary['PercentOverCDV'] = (Summary.MaxVolumeAboveNDayVolume+Summary.MaxConsecutiveDayVolume)/Summary.MaxConsecutiveDayVolume*100
 conditions = [
-    (Summary.MaxVolumeAboveNDayVolume == np.nan) | (Summary.PercentOverCDV <= LowPercentThresholdCDV),
+    (pd.isnull(Summary['MaxVolumeAboveNDayVolume'])) | (Summary.PercentOverCDV <= LowPercentThresholdCDV),
     ((Summary.NumberOfConsecutiveDays == 1) & (Summary.PercentOverCDV > HighPercentThresholdCDV)) | ((Summary.NumberOfConsecutiveDays > 1) & (Summary.PercentOverCDV > 120))
              ]
 choices = [LowRiskCDV,HighRiskCDV]
@@ -747,7 +783,7 @@ LowRiskRoT = 0
 Summary['PercentOverRoT'] = (Summary.MaxRateTaken/Summary.MaxTakeRate)*100
 
 conditions = [
-    (Summary.MaxTakeRate == np.nan) | (Summary.MaxRateTaken == np.nan) | (Summary.PercentOverRoT<= LowPercentThresholdRoT),
+    (pd.isnull(Summary['MaxTakeRate'])) | (pd.isnull(Summary['MaxRateTaken'])) | (Summary.PercentOverRoT<= LowPercentThresholdRoT),
     ((Summary.MaxRateTaken/Summary.MaxTakeRate)*100 > HighPercentThresholdRoT)
              ]
 choices = [LowRiskRoT,HighRiskRoT]
@@ -763,7 +799,7 @@ LowRiskAV = 0
 OtherRiskAV = 1
 
 conditions = [
-    (Summary.PercentAnnualVolumeTaken == np.nan) | (Summary.PercentAnnualVolumeTaken <= LowVolumeThresholdAV),
+    (pd.isnull(Summary['PercentAnnualVolumeTaken'])) | (Summary.PercentAnnualVolumeTaken <= LowVolumeThresholdAV),
     (Summary.PercentAnnualVolumeTaken > HighVolumeThresholdAV),
     (Summary.PercentAnnualVolumeTaken > LowVolumeThresholdAV) & (Summary.PercentAnnualVolumeTaken <= HighVolumeThresholdAV)
              ]
@@ -779,12 +815,13 @@ MedRiskLF = 1
 LowRiskLF = 0
 
 conditions = [
-    (Summary.TotalVolumeAboveRestriction == np.nan) | (Summary.TotalVolumeAboveRestriction == 0) | (Summary.TotalDaysAboveRestriction == np.nan),
+    (pd.isnull(Summary['TotalVolumeAboveRestriction'])) | (Summary.TotalVolumeAboveRestriction == 0) | (Summary.TotalDaysAboveRestriction == np.nan),
     (Summary.TotalVolumeAboveRestriction > VolumeThresholdLF) & (Summary.TotalDaysAboveRestriction > DaysThresholdLF)
              ]
 choices = [LowRiskLF,HighRiskLF]
 Summary['LFNC'] = np.select(conditions, choices, default = MedRiskLF)
 
+#Summary.to_csv(r'D:\Implementation Support\Python Scripts\scripts\Export\Summary.csv')
 
 
 
