@@ -1,0 +1,93 @@
+Relationships:
+Consent 1 - < Activity
+Consent 1 - < Wap
+Consent 1 - < Inspections
+Activity 1 - 1 SummaryConsent
+Wap 1 - < Activity (wap)
+Wap 1 - < Meter
+Wap 1 - < SummaryWAP
+Meter 1 - 1 Telemetry
+
+
+
+Baseline (data collection): 
+	Consent Baseline
+		Consent Complications
+		WaterUserGroup
+		Location (max)
+		EC Number
+		Campaigns
+			RSC
+			TLA
+			Meter
+			ST
+			No Data 17/18
+			Pending Data Cleaning
+
+	Activity Baseline	(GW/SW complexties)
+		Consent Allocation
+		Adaptive Managment
+		Consent Water use
+			Consent Missing Data
+			Consent Rate
+			Consent Annual Volume
+			Consent Consecutive Day Volume
+			Consent Low Flow Restrictions
+
+	Wap Baseline
+		WAP Allocation
+		WAP Complications
+		WAP Water Use
+			WAP Missing Data
+			WAP Rate
+			WAP Annual Volume
+			WAP Consecutive Day Volume
+			WAP Low Flow Restrictions		
+	
+	Meter Baseline
+		Meter Complications	
+		Install
+		Verfication
+		Telemetry
+
+	Inspection Baseline
+		Water Use Data
+		Daily Alert
+		Meter
+
+
+
+
+Risk Calculation
+	Allocation Risk - L/B
+	Complication Risk
+		Complex Consents Risk - B
+		Parent Child Consent Risk - B
+		Adaptive Management Risk - B
+		Water User Group Risk - B	
+		Shared WAP Risk - B
+		Shared Meter Risk - B
+	Meter Risk
+		Install Risk - B
+		Verification Risk - B
+		Waiver Risk - B
+	Campaign Risk - B
+	Inspection Risk  - L/B
+		Inspection History Risk - L
+		Segmentation 17/18 - B
+	Water Usage Risk
+		Consent Missing Data Risk - L
+		Consent Rate Risk - L
+		Consent Annual Volume Risk - L
+		Consent Consecutive Day Volume Risk - L
+		Consent Low Flow Restriction Risk - L
+		WAP Missing Data Risk - L
+		WAP Rate Risk - L
+		WAP Annual Volume Risk - L
+		WAP Consecutive Day Volume Risk - L
+		WAP Low Flow Restriction Risk - L
+
+Segmentation Model
+	Risk Toggle 
+	Risk Weighting
+	Bucket Threshold

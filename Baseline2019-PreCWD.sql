@@ -30,8 +30,8 @@ SELECT
 	,(Case when (COUNT(Distinct([From Month]))>1 or  COUNT( DISTINCT([To Month]))>1) then Max([Max Rate for WAP (l/s)]) else Null end) as MaxOfDifferentPeriodRate
 	--,CAST(Con.[Consented Annual Volume (m3/year)] as Float) as CVolume
 	,CAST(Dat.[Full Effective Annual Volume (m3/year)] as Float) as FEVolume
-into 
-	#tempAllConsents2 
+--into 
+--	#tempAllConsents2 
 FROM 
 	[DataWarehouse].[dbo].[D_ACC_Act_Water_TakeWaterWAPAlloc] Wap --rate of take
 	inner join [DataWarehouse].[dbo].[F_ACC_PERMIT] Per --permit
@@ -50,7 +50,7 @@ where
 	--and 
 	--Con.Activity like 'Take%' 
 	and 
-	((B1_APPL_STATUS in ('Issued - Active', 'Issued - s124 Continuance') and fmDate <  '2019-07-01 00:00:00.000')
+	((B1_APPL_STATUS in ('Issued - Active', 'Issued - s124 Continuance') and fmDate <  '2019-06-30 00:00:00.000')
 	or
 	(B1_APPL_STATUS ='Terminated - Replaced' and toDate >  '2018-10-01 00:00:00.000' )) --changed to first of October
 	and [B1_PER_SUB_TYPE]='Water Permit (s14)' 
