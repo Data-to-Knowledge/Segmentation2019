@@ -2,6 +2,8 @@ Relationships:
 Consent 1 - < Activity
 Consent 1 - < Wap
 Consent 1 - < Inspections
+Consent > - 1 EC Number
+Consent 1 - < Campaigns (1-1 for each campaign)
 Activity 1 - 1 SummaryConsent
 Wap 1 - < Activity (wap)
 Wap 1 - < Meter
