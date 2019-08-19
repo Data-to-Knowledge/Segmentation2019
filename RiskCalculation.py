@@ -1,4 +1,21 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon 19 August 2019
+@author: KatieSi
+"""
+#reset
+#clear
 
+# Import packages
+import numpy as np
+import pandas as pd
+import pdsql
+from datetime import datetime, timedelta
+
+
+# Set Variables
+ReportName= 'Water Inspection Prioritzation Model'
+RunDate = datetime.now()
 # Consent Risk
 ## Campaign Risk
 

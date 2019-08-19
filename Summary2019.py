@@ -166,16 +166,16 @@ print('\nWAPSummary Table ',
 
 
 ############################################################################
-Segmentation = pd.merge(Baseline, ConsentSummary, 
+Baseline = pd.merge(Baseline, ConsentSummary, 
         on = ['ConsentNo','Activity'], 
         how = 'left')
-Segmentation = pd.merge(Segmentation, WAPSummary, 
+Baseline = pd.merge(Baseline, WAPSummary, 
         on = ['ConsentNo','WAP','Activity','WAPFromMonth','WAPToMonth'], 
         how = 'left')
 
-print('\nSegmentation Table ',
-      Segmentation.shape,'\n',
-      Segmentation.nunique(), '\n\n')
+print('\nBaseline Table ',
+      Baseline.shape,'\n',
+      Baseline.nunique(), '\n\n')
 
 
 # many examples of limits on Accela not matching from hilltop
