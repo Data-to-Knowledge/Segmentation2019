@@ -26,10 +26,11 @@ TermDate = datetime.strptime(TermDate, '%Y-%m-%d')
 IssuedDate = '2019-07-01'
 TelemetryFromDate = '2018-07-01'# previous model Jan-1
 TelemetryToDate = '2019-07-01' #non existant in previous model
-InspectionStartDate = '2014-07-01' #'2018-07-13'
+InspectionStartDate = '2016-07-01' #'2018-07-13'
 InspectionEndDate = '2019-07-01' #'2019-11-01'
-SummaryTableRunDate = datetime.strptime('2019-08-08', '%Y-%m-%d').date()
+SummaryTableRunDate = '2019-08-20'
 VerificationLimit = '2014-07-01'
+WaiverLimit = '2018-07-01'
 
 
 # Set Table Variables
@@ -149,9 +150,9 @@ WAPLimit = pdsql.mssql.rd_sql(
                    )
 
 WAPLimit.rename(columns=WAPLimitColNames, inplace=True)
-WAPLimit['ConsentNo'] = WAPLimit['ConsentNo'] .str.strip().str.upper()
-WAPLimit['Activity'] = WAPLimit['Activity'] .str.strip().str.lower()
-WAPLimit['WAP'] = WAPLimit['WAP'] .str.strip().str.upper()
+WAPLimit['ConsentNo'] = WAPLimit['ConsentNo'].str.strip().str.upper()
+WAPLimit['Activity'] = WAPLimit['Activity'].str.strip().str.lower()
+WAPLimit['WAP'] = WAPLimit['WAP'].str.strip().str.upper()
 
 #create useful WAP lists
 WAPMaster = list(set(WAPLimit['WAP'].values.tolist()))
@@ -581,7 +582,7 @@ SharedWAP = temp.groupby(
   ).agg(
           {
             'WAPRate' : 'max',
-            'MaxRateProRata': 'max',
+            'MaxRateProRata': 'sum',
             'ConsentNo' : pd.Series.nunique,
             'HolderEcanID' : pd.Series.nunique,
           }
@@ -589,7 +590,7 @@ SharedWAP = temp.groupby(
 SharedWAP.rename(columns = 
          {
           'WAPRate' :'MaxRateSharedWAP',
-          'MaxRateProRata': 'MaxProRataRateSharedWAP',
+          'MaxRateProRata': 'CombinedWAPProRataRate',
           'ConsentNo' : 'ConsentsOnWAP',
           'HolderEcanID' : 'ECsOnWAP'
                  },inplace=True)
@@ -607,11 +608,13 @@ SharedConsent = temp.groupby(
         ).agg(
                 {
                 'WAP' : pd.Series.nunique,
+                'MaxRateProRata': 'sum'
                 }
             )
 SharedConsent.rename(columns = 
          {
           'WAP' :'WAPsOnConsent',
+          'MaxRateProRata': 'CombinedConProRataRate'          
          },inplace=True)
 
 print('\nSharedConsent Table ',
@@ -722,6 +725,8 @@ Telemetry = pd.merge(HydroUsage, Telemetry, on = 'WAP', how = 'outer')
 
 Telemetry['T_AverageDaysOfData'] = Telemetry['T_DaysOfData']// Telemetry['T_MetersRecieved']
 
+Telemetry['T_AverageMissingDays'] = 365 - Telemetry['T_AverageDaysOfData']
+
 
 print('\nTelemetry Table ',
       Telemetry.shape,'\n',
@@ -761,9 +766,27 @@ conditions = [
 choices = ['Active']
 WellDetails['WellStatus'] = np.select(conditions, choices, default = np.nan)
 
-WellDetails['SharedMeter'] = np.where(WellDetails['GWuseAlternateWell'] != WellDetails['WAP'], WellDetails['GWuseAlternateWell'], np.nan)
+WellDetails['ChildMeter'] = np.where(WellDetails['GWuseAlternateWell'] != WellDetails['WAP'], 'Yes', np.nan)
 
-WellDetails = WellDetails.drop(['GWuseAlternateWell'], axis=1)
+WellDetails['SharedMeterName']  = np.where(WellDetails['GWuseAlternateWell'] != WellDetails['WAP'], WellDetails['GWuseAlternateWell'], np.nan)
+
+SharedMeter = WellDetails[['SharedMeterName']]
+SharedMeter= SharedMeter.dropna()
+SharedMeter['ParentMeter'] = 'Yes'
+SharedMeter.rename(columns={"SharedMeterName": "WAP"}, inplace= True)
+
+
+WellDetails = pd.merge(WellDetails, SharedMeter, on = ['WAP'], how = 'left')
+
+
+WellDetails['SharedMeter'] = np.where(
+       (( WellDetails['ParentMeter'] == 'Yes') | (WellDetails['ChildMeter'] == 'Yes')), 
+        'Yes', np.nan)
+       
+
+
+
+WellDetails = WellDetails.drop(['GWuseAlternateWell','ParentMeter','SharedMeterName','ChildMeter'], axis=1)
 
 print('\nWellDetails Table ',
       WellDetails.shape,'\n',
@@ -797,17 +820,18 @@ Waiver.rename(columns=WaiverColNames, inplace=True)
 Waiver['WAP'] = Waiver['WAP'] .str.strip().str.upper()
 
 conditions = [
-        Waiver['WM_Tmp_Waiver'] == 1
-               ]
-choices = [1]
-Waiver['Waiver'] = np.select(conditions, choices, default = 0)
-
-conditions = [
         ((Waiver['WM_Tmp_Waiver'] == 1) & (Waiver['EPO_LAST_UPDATE'].notnull()))
                ]
 choices = [Waiver['EPO_LAST_UPDATE']]
 Waiver['WaiverEditDate'] = np.select(conditions, choices, default = pd.NaT)
 Waiver['WaiverEditDate'] = pd.to_datetime(Waiver['WaiverEditDate'], errors = 'coerce')
+
+conditions = [
+        Waiver['WaiverEditDate'] >= WaiverLimit,
+        Waiver['WaiverEditDate'] < WaiverLimit
+               ]
+choices = ['Yes', 'OutofDate']
+Waiver['Waiver'] = np.select(conditions, choices, default = np.nan)
 
 
 Waiver = Waiver.drop(['WM_Tmp_Waiver', 
@@ -856,7 +880,7 @@ conditions = [
                 (Verification['LatestVerification'].isnull()))
                ]
 choices = ['No' , 'Yes']
-Verification['VerificationOutOfDate'] = np.select(conditions, choices, default = np.nan)
+Verification['VerificationOutOfDate'] = np.select(conditions, choices, default = 'Yes')
 
 print('\nVerification Table ',
       Verification.shape,'\n',
@@ -1002,6 +1026,7 @@ NonCompliance = Inspection.groupby(
   ).agg(
           {
           'Inspection' : 'count',
+          'InspectionCompleteDate' : 'max',
           'NonCompliance' : 'sum',
           'NonComplianceDate' : 'max',
           }
@@ -1010,6 +1035,7 @@ NonCompliance = Inspection.groupby(
 NonCompliance.rename(columns = 
          {
           'Inspection' : 'TotalInspections',
+          'InspectionCompleteDate' :'LatestInspection',
           'NonCompliance' :'CountNonCompliance',
           'NonComplianceDate' : 'LatestNonComplianceDate',
                  },inplace=True)
@@ -1020,8 +1046,8 @@ print('\nNonCompliance Table ',
 
 
 # Campaign Participants
-CampaignConsent = pd.read_csv("CampaignConsents.csv") 
-CampaignWAP = pd.read_csv("CampaignWAPs.csv")
+CampaignConsent = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\CampaignConsents.csv")
+CampaignWAP = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\CampaignWAPs.csv")
 
 CampaignConsent = CampaignConsent.drop_duplicates(subset =
         ['ConsentNo',],keep= 'first')
@@ -1029,10 +1055,8 @@ CampaignWAP = CampaignWAP.drop_duplicates(subset =
         ['WAP',],keep= 'first')
 
 print('CampaignConsent ', CampaignConsent.shape, '\n',
-      CampaignConsent.dtypes,'\n',
       CampaignConsent.nunique(), '\n\n')
 print('CampaignWAP ', CampaignWAP.shape, '\n',
-      CampaignWAP.dtypes,'\n',
       CampaignWAP.nunique(), '\n\n')
 
 
@@ -1221,7 +1245,7 @@ print('\nWAPSummary Table ',
 AllLimit = pd.merge(ConsentLimit, WAPLimit, on = ['ConsentNo','Activity'], how = 'outer')
 AllLimit = pd.merge(AllLimit, FEV, on = ['ConsentNo','Activity'], how = 'left')
 
-#AllSummary = pd.merge(ConsentLimit, WAPSummary, on = ['ConsentNo','Activity'], how = 'outer')
+#AllSummary = pd.merge(ConsentSummary, WAPSummary, on = ['ConsentNo','Activity'], how = 'outer')
 
 Consent = pd.merge(ConsentBase, ConsentDetails, on = 'ConsentNo', how = 'left')
 Consent = pd.merge(Consent, Location, on = 'ConsentNo', how = 'left')
@@ -1243,7 +1267,7 @@ WAP = pd.merge(WAP, CampaignWAP, on = 'WAP', how = 'left')
 Baseline = pd.merge(WAP, AllLimit, on = 'WAP', how = 'right')
 Baseline = pd.merge(Consent, Baseline, on = 'ConsentNo', how = 'right')
 
-#Baesline = pd.merge(Baseline, AllSummary, 
+#Baseline = pd.merge(Baseline, AllSummary, 
 #        on = ['ConsentNo','WAP','Activity','WAPFromMonth','WAPToMonth','WAPRate'], 
 #        how = 'left')
 
@@ -1264,7 +1288,9 @@ print('\nBaseline Table ',
 ############################################################################
 
 
-
+Baseline = pd.merge(Baseline, AllSummary, 
+        on = ['ConsentNo','WAP','Activity','WAPFromMonth','WAPToMonth','WAPRate'], 
+        how = 'left')
 
 #© 2019 GitHub, Inc.
 #Terms
