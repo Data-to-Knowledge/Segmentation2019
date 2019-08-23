@@ -27,7 +27,7 @@ Segmentation = Baseline
 
 ## Campaign Risk
 HighRiskCamp = 'Warning'
-LowRiskCamp = np.nan
+LowRiskCamp = ''
 
 conditions = [
 	((Segmentation['ConsentProject'].isnull()) &
@@ -39,7 +39,7 @@ Segmentation['CampaignRisk'] = np.select(conditions, choices, default = HighRisk
 
 ##Water User Group
 HighRiskWUG = 'Warning'
-LowRiskWUG = np.nan
+LowRiskWUG = ''
 
 conditions = [
 	(Segmentation['WUGNo'].isnull())
@@ -50,7 +50,7 @@ Segmentation['WUGRisk'] = np.select(conditions, choices, default = HighRiskWUG)
 
 ## Adaptive Management
 HighRiskAM = 'Warning'
-LowRiskAM = np.nan
+LowRiskAM = ''
 
 conditions = [
 	(Segmentation['AdMan'].isnull())		 
@@ -124,7 +124,7 @@ Segmentation['AllocationRisk'] = np.select(conditions, choices, default = LowRis
 
 #Complex Conditions Risk
 HighRiskConditions = 'Warning'
-LowRiskConditions = 0
+LowRiskConditions = ''
 
 conditions = [
 	(Segmentation['ComplexAllocations'] == 'No' ),
@@ -157,7 +157,7 @@ Segmentation['WaiverRisk'] = np.select(conditions, choices, default = LowRiskWai
 
 #Shared Meter
 HighRiskSharedMeter = 'Warning'
-LowRiskSharedMeter = np.nan
+LowRiskSharedMeter = ''
 
 conditions = [
 	(Segmentation['SharedMeter'] == 'Yes' )
@@ -168,7 +168,7 @@ Segmentation['SharedMeterRisk'] = np.select(conditions, choices, default = LowRi
 
 #Shared WAP
 HighRiskSharedWAP = 'Warning'
-LowRiskSharedWAP = np.nan
+LowRiskSharedWAP = ''
 
 conditions = [
 	(Segmentation['ConsentsOnWAP'] > 1 ),
@@ -178,15 +178,14 @@ Segmentation['SharedWAPRisk'] = np.select(conditions, choices, default = LowRisk
 
 
 #Risk under 5ls
-HighRiskUnder5ls = -100
-LowRiskSharedUnder5ls = 0
+HighRiskUnder5ls = 'Warning'
+LowRiskSharedUnder5ls = ''
 
 conditions = [
-	((Segmentation['MaxRateProRata'] < 5) | (Segmentation['WAPRate'] < 5)),
-    ((Segmentation['MaxRateProRata'] >= 5) | (Segmentation['WAPRate'] >= 5))
+	(Segmentation['WAPRate'] < 5),
 			 ]
-choices = [HighRiskSharedMeter,LowRiskSharedMeter]
-Segmentation['Under5lsRisk'] = np.select(conditions, choices, default = np.nan)
+choices = [HighRiskSharedMeter]
+Segmentation['Under5lsRisk'] = np.select(conditions, choices, default = LowRiskSharedMeter)
 
 # Inspection History Risk
 
@@ -293,7 +292,7 @@ Segmentation['WS_MRNC'] = np.select(conditions, choices, default = np.nan)
 HighVolumeThresholdAV = 200
 MedVolumeThresholdAV = 110
 LowVolumeThresholdAV = 100
-NoiseRiskAV = -5
+NoiseRiskAV = 'Warning'
 HighRiskAV = 3 #was 2000
 MedRiskAV = 1 # was 100
 LowRiskAV = 0
@@ -309,18 +308,6 @@ conditions = [
              ]
 choices = [NoiseRiskAV, LowRiskAV, MedRiskMR, HighRiskAV]
 Segmentation['CS_AVNC'] = np.select(conditions, choices, default = np.nan)
-
-
-conditions = [
-        (Segmentation['WS_PercentAnnualVolume'] > HighVolumeThresholdAV),
-        (Segmentation['WS_PercentAnnualVolume'] < LowVolumeThresholdAV),
-        ((Segmentation['WS_PercentAnnualVolume'] > LowVolumeThresholdAV) & 
-        (Segmentation['WS_PercentAnnualVolume'] <= MedVolumeThresholdAV)),
-        ((Segmentation['WS_PercentAnnualVolume'] > MedVolumeThresholdAV) & 
-        (Segmentation['WS_PercentAnnualVolume'] <= HighVolumeThresholdAV))
-             ]
-choices = [NoiseRiskAV, LowRiskAV, MedRiskMR, HighRiskAV]
-Segmentation['WS_AVNC'] = np.select(conditions, choices, default = np.nan)
 
 
 
@@ -445,22 +432,16 @@ Segmentation['InspectionNecessity'] = np.select(conditions, choices, default = 1
 # 2 - must inspect
 
 
+#Segmentation['DoNotInspectWAP'] = np.where(
+#        (Segmentation['WaiverRisk'] == 'Warning') | 
+#        (Segmentation['Under5lsRisk'] == 'Warning'), 
+#        1, np.nan)
+#
+#Segmentation['DoNotInspectConsent'] = np.where(
+#        Segmentation['CampaignRisk'] == 'Warning', 
+#        'Warning', np.nan)
 
-
-
-Segmentation['DoNotInspectWAP'] = np.where(
-        (Segmentation['WaiverRisk'] == 'Warning') | 
-        (Segmentation['Under5lsRisk'] == 'Warning'), 
-        1, np.nan)
-
-Segmentation['DoNotInspectConsent'] = np.where(
-        Segmentation['CampaignRisk'] == 'Warning', 
-        'Warning', np.nan)
-
-
-        
-        
-        )
+      
 col_list = [
         'VerificationRisk',
         'LatestInspectionRisk',
@@ -477,20 +458,79 @@ col_list = [
 
 Segmentation['TotalRisk'] = Segmentation[col_list].sum(axis=1)
 
-temp = Segmentation.groupby(
+InspectionList = Segmentation.groupby(
         ['ConsentNo'], as_index=False
         ).agg({
                 'TotalRisk': 'max',
-                'DoNotInspectConsent' : 'max',
-                'DoNotInspectWAP' : 'sum',
-                'Waiver' : 'count',
-                'WAPsOnConsent' : 'max',
-                'InspectionAssignment' : 'max'
+#                'DoNotInspectConsent' : 'max',
+#                'DoNotInspectWAP' : 'sum',
+#                'Waiver' : 'count',
+#                'WAPsOnConsent' : 'max',
+                'CWMSZone' :'max',
+                'InspectionAssignment' : 'max',
                 'InspectionNecessity' : 'min'
                 })
 
 
-temp['WAPsToInspect'] = temp['WAPsOnConsent'] - temp['Waiver']
+Segmentation['IntroNote'] = ('This consent has been assessed through the 2018/19 inspection allocation model.')
+Segmentation['ParentNote'] = ('Consent is related to '+ Segmentation['ParentChildConsent'])
+Segmentation['AdManNote'] = np.where(Segmentation['AMRisk'] == 'Warning', 
+            'Contains Adaptive Managment Consitions',np.nan)
+Segmentation['WUGNote'] = (
+                            'Part of Water User Group ' + 
+                            Segmentation['WUGNo'] + 
+                            Segmentation['WUGName'] +
+                            '. Monitoring Officer : '+
+                            Segmentation['WUGMonOfficer']
+                            )
+
+temp = Segmentation['WAPsOnConsent'].astype(str) 
+
+Segmentation['WAPCountNote'] =  np.where(Segmentation['WAPsOnConsent'] > 1,(
+                            Segmentation['WAPsOnConsent'].astype(str) +
+                            ' Allocated WAPS on the consent. '
+                            ), np.nan)
+Segmentation['SharedMeterNote'] = (
+                            Segmentation['WAP'] +
+                            'Shares a meter with other WAPs. '
+                            )
+Segmentation['SharedWAPNote'] = np.where(Segmentation['ConsentsOnWAP'] > 1, (
+                            Segmentation['WAP'] +
+                            ' exists on '+
+                            Segmentation['ConsentsOnWAP'].astype(str) +
+                            ' consents active this season'), np.nan
+                            )
+
+Segmentation['VerificationNote'] = np.where(Segmentation['VerificationOutOfDate'] != 'Yes',
+                                            'Verification records is either out of date or does not exist. ',
+                                            np.nan)
+Segmentation['CampaignNote'] = np.where(Segmentation['CampaignRisk'] == 'Warning',
+                                        'Consent is part of an ongoing project and was not selected for inspection. ',
+                                            np.nan)
+
+#example = pd.DataFrame([
+#        ['Mr. Smith', 'Mr. Smith','Mr. Jones','Mr. Jones','Mr. Jones'], 
+#        ['CRC1','CRC1','CRC2','CRC3','CRC3'], 
+#        ['NCx','NCy','NCx','NCy','NCz']
+#        ]).T
+#
+#output = pd.DataFrame([
+#        ['Mr. Smith', 'Dear Mr. Smith, there is NCx and NCy on CRC1'], 
+#        ['Mr.Jones', 'Dear Mr. Jones, there is NCx on CRC2 and NCy and NCz on CRC3']
+#        ])
+#
+#ex2 = example.groupby([0, 1])[2].apply(lambda x: ', and '.join(x))
+#ex2 = example.groupby([0, 1])[2].apply(lambda x: ', and '.join(x)).reset_index()
+#ex2['crc_nc'] = ex2[1] + ' has ' + ex2[2]
+#ex2.groupby(0).crc_nc.apply(lambda x: ', and '.join(x))
+#
+#
+#'CRC1 has NCx and NCy'
+#'CRC2 has NCx. CRC3 has NCy and NCz'
+
+
+
+#temp['WAPsToInspect'] = temp['WAPsOnConsent'] - temp['Waiver']
 #
 #
 #conditions = [

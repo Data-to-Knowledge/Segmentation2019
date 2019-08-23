@@ -1288,10 +1288,12 @@ print('\nBaseline Table ',
 ############################################################################
 
 
-Baseline = pd.merge(Baseline, AllSummary, 
-        on = ['ConsentNo','WAP','Activity','WAPFromMonth','WAPToMonth','WAPRate'], 
-        how = 'left')
-
+#Baseline = pd.merge(Baseline, AllSummary, 
+#        on = ['ConsentNo','WAP','Activity','WAPFromMonth','WAPToMonth','WAPRate'], 
+#        how = 'left')
+#
+  
+  
 #© 2019 GitHub, Inc.
 #Terms
 #Privacy
