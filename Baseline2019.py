@@ -25,7 +25,7 @@ TermDate = '2018-10-01'
 TermDate = datetime.strptime(TermDate, '%Y-%m-%d')
 IssuedDate = '2019-07-01'
 TelemetryFromDate = '2018-07-01'# previous model Jan-1
-TelemetryToDate = '2019-07-01' #non existant in previous model
+TelemetryToDate = '2019-06-30' #non existant in previous model
 InspectionStartDate = '2016-07-01' #'2018-07-13'
 InspectionEndDate = '2019-07-01' #'2019-11-01'
 SummaryTableRunDate = '2019-08-20'
@@ -95,7 +95,7 @@ conditions = [
 choices = ['Child' , 'Parent']
 ConsentDetails['ParentorChild'] = np.select(conditions, choices, default = np.nan)
 choices2 = [ConsentDetails['ChildAuthorisations'] ,ConsentDetails['ParentAuthorisations']]
-ConsentDetails['ParentChildConsent'] = np.select(conditions, choices2, default = np.nan)
+ConsentDetails['ParentChildConsent'] = np.select(conditions, choices2, default = '')
 
 print('ConsentMaster ', len(ConsentMaster),
       '\nConsentBase ', ConsentBase.shape[0],
@@ -727,7 +727,6 @@ Telemetry['T_AverageDaysOfData'] = Telemetry['T_DaysOfData']// Telemetry['T_Mete
 
 Telemetry['T_AverageMissingDays'] = 365 - Telemetry['T_AverageDaysOfData']
 
-
 print('\nTelemetry Table ',
       Telemetry.shape,'\n',
       Telemetry.nunique(), '\n\n')
@@ -1059,6 +1058,8 @@ print('CampaignConsent ', CampaignConsent.shape, '\n',
 print('CampaignWAP ', CampaignWAP.shape, '\n',
       CampaignWAP.nunique(), '\n\n')
 
+# Midseason inspections
+MidseasonInspections = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\MidseasonInspections.csv")
 
 #Summary Table
 ConsentSummaryCol = [
@@ -1148,7 +1149,6 @@ WAPSummaryCol = [
 #        'TotalDaysAboveNDayVolume', #unreliable. not used previous years
 #        'MaxVolumeAboveNDayVolume', #unreliable. not used previous years
 #        'MedianVolumeTakenAboveMaxVolume', #unreliable. not used previous years
-        'PercentAnnualVolumeTaken',
         'TotalTimeAboveRate', #not used previous years
         'MaxRateTaken',#not used previous years
         'MedianRateTakenAboveMaxRate', #not available in previous year
@@ -1162,7 +1162,6 @@ WAPSummaryColNames = {
         'ToMonth' : 'WAPToMonth',
         'MeterName' : 'WS_MeterName',
         'ErrorMsg' : 'WS_ErrorMsg',
-        'PercentAnnualVolumeTaken': 'WS_PercentAnnualVolume',
         'TotalTimeAboveRate' : 'WS_TimeAboveRate',
         'MaxRateTaken' : 'WS_MaxRate',#not used previous years
         'MedianRateTakenAboveMaxRate' : 'WS_MedianRateAbove', #not available in previous year
@@ -1196,7 +1195,7 @@ WAPSummary['WAP'] = WAPSummary['WAP'] .str.strip().str.upper()
 
 WAPSummary['WS_PercentMaxRoT'] = (
         WAPSummary['WS_MaxRate']/WAPSummary['WAPRate'])*100
-WAPSummary['WS_PercentMedRoT'] = (
+WAPSummary['WS_PercentMedRate'] = (
         WAPSummary['WS_MedianRateAbove']/WAPSummary.WAPRate)*100        
 
 print('\nWAPSummary Table ',
@@ -1254,6 +1253,7 @@ Consent = pd.merge(Consent, WUG, on = 'ConsentNo', how = 'left')
 Consent = pd.merge(Consent, NonCompliance, on = 'ConsentNo' , how = 'left' )
 Consent = pd.merge(Consent, SharedConsent, on = 'ConsentNo' , how = 'left' )
 Consent = pd.merge(Consent, CampaignConsent, on = 'ConsentNo' , how = 'left' )
+Consent = pd.merge(Consent, MidseasonInspections, on = 'ConsentNo' , how = 'left' )
 
 WAP = pd.merge(WAPBase, WellDetails, on = 'WAP', how = 'left')
 WAP = pd.merge(WAP, SharedWAP, on = 'WAP', how = 'left')
