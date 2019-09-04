@@ -3,24 +3,31 @@
 Created on Thu Apr 18 14:52:35 2019
 @author: KatieSi
 """
-#reset
-#clear
 
-# Import packages
+##############################################################################
+### Import Packages
+##############################################################################
+
 import numpy as np
 import pandas as pd
 import pdsql
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 
-# Set Variables
+##############################################################################
+### Set Variables
+##############################################################################
+
 ReportName= 'Water Inspection Prioritzation Model'
-RunDate = datetime.now()
-ConsentMaster = []
-WAPMaster = []
+RunDate = str(date.today())
+#ConsentMaster = []
+#WAPMaster = []
 
 
-# Set Risk Paramters
+##############################################################################
+### Set Risk Paramters
+##############################################################################
+
 TermDate = '2018-10-01'
 TermDate = datetime.strptime(TermDate, '%Y-%m-%d')
 IssuedDate = '2019-07-01'
@@ -33,8 +40,15 @@ VerificationLimit = '2014-07-01'
 WaiverLimit = '2018-07-01'
 
 
-# Set Table Variables
-# Consent Information
+##############################################################################
+### Import Data and Calculate Statistics
+##############################################################################
+
+##############################################################################
+### Import Targeted Consents
+
+
+### Import Base Consent Information
 ConsentDetailsCol = [
         'B1_ALT_ID',
         'B1_APPL_STATUS',
@@ -51,11 +65,13 @@ ConsentDetailsColNames = {
         }
 ConsentDetailsImportFilter = {
        'B1_PER_SUB_TYPE' : ['Water Permit (s14)'] ,
-       'B1_APPL_STATUS' : ['Terminated - Replaced', 'Issued - Active', 'Issued - s124 Continuance']      
+       'B1_APPL_STATUS' : ['Terminated - Replaced',
+                           'Issued - Active',
+                           'Issued - s124 Continuance']      
         }
 ConsentDetailswhere_op = 'AND'
 ConsentDetailsDate_col = 'toDate'
-ConsentDetailsfrom_date = '2018-10-1' #dates are inclusive in PY and exclusive in SQL
+ConsentDetailsfrom_date = '2018-10-1' #dates are inclusive in PY - exclusive in SQL
 ConsentDetailsServer = 'SQL2012Prod03'
 ConsentDetailsDatabase = 'DataWarehouse'
 ConsentDetailsTable = 'F_ACC_PERMIT'
@@ -71,21 +87,23 @@ ConsentDetails = pdsql.mssql.rd_sql(
                    from_date = ConsentDetailsfrom_date
                    )
 
+# Format data
 ConsentDetails.rename(columns=ConsentDetailsColNames, inplace=True)
 ConsentDetails['ConsentNo'] = ConsentDetails['ConsentNo'].str.strip().str.upper()
 
-# remove consents issued after FY28/19
+# Remove consents issued after FY28/19
 ConsentInfo = ConsentDetails[ConsentDetails['fmDate'] < '2019-07-01']
 
-# consent list
+# Create list of consents active in this financial year
 ConsentMaster = list(set(ConsentDetails['ConsentNo'].values.tolist()))
 
+# Create dataframe of consents active in this financial year
 ConsentBase = ConsentDetails[['ConsentNo']]
 ConsentBase = ConsentBase.drop_duplicates()
 
 
 
-#change info
+# Calculate info on consents parent tree
 conditions = [
         ConsentDetails.ConsentStatus == 'Terminated - Replaced',
         ((ConsentDetails.ConsentStatus == 'Issued - Active') |
@@ -97,6 +115,7 @@ ConsentDetails['ParentorChild'] = np.select(conditions, choices, default = np.na
 choices2 = [ConsentDetails['ChildAuthorisations'] ,ConsentDetails['ParentAuthorisations']]
 ConsentDetails['ParentChildConsent'] = np.select(conditions, choices2, default = '')
 
+# Print overview of table
 print('ConsentMaster ', len(ConsentMaster),
       '\nConsentBase ', ConsentBase.shape[0],
       '\n\nConsentDetails Table ',
@@ -104,7 +123,10 @@ print('ConsentMaster ', len(ConsentMaster),
       ConsentDetails.nunique(), '\n\n')
 
 
-# WAP Limit Information
+##############################################################################
+### Import WAPAllocation Limits
+
+# Import table
 WAPLimitCol = [
         'WAP',
         'RecordNumber',
@@ -149,18 +171,24 @@ WAPLimit = pdsql.mssql.rd_sql(
                    where_in = WAPLimitImportFilter
                    )
 
+# Format data
 WAPLimit.rename(columns=WAPLimitColNames, inplace=True)
 WAPLimit['ConsentNo'] = WAPLimit['ConsentNo'].str.strip().str.upper()
 WAPLimit['Activity'] = WAPLimit['Activity'].str.strip().str.lower()
 WAPLimit['WAP'] = WAPLimit['WAP'].str.strip().str.upper()
 
-#create useful WAP lists
+# Create list of WAPs on consents active in this financial year
 WAPMaster = list(set(WAPLimit['WAP'].values.tolist()))
 
 WAPBase = WAPLimit[['WAP']]
 WAPBase = WAPBase.drop_duplicates()
 
-WAPLink = WAPLimit[['ConsentNo','Activity','WAP','WAPToMonth','WAPFromMonth','WAPRate']]
+WAPLink = WAPLimit[['ConsentNo',
+                    'Activity',
+                    'WAP',
+                    'WAPToMonth',
+                    'WAPFromMonth',
+                    'WAPRate']]
 WAPLink = WAPLink.drop_duplicates()
 
 Consent_WAP = WAPLimit[['ConsentNo','WAP',]]
@@ -169,6 +197,7 @@ Consent_WAP = Consent_WAP.drop_duplicates()
 WAPRate = WAPLimit[['ConsentNo','WAP','WAPRate','MaxRateProRata']]
 WAPRate = WAPRate.drop_duplicates()
 
+# Print overview of table
 print('WAPMaster ',len(WAPMaster), '\n',
       
       '\nWAPBase ', WAPBase.shape, '\n',
@@ -185,18 +214,22 @@ print('WAPMaster ',len(WAPMaster), '\n',
             
       )
 
-# Reshape Data
+##############################################################################
+### Reshape Data to ease access to NDay volume allocation limits
 
-
+# Duplicate each record 5 times
 temp = WAPLimit.reindex(WAPLimit.index.repeat(repeats = 5))
+
+# Add a counter
 temp['TempRow']=temp.groupby(level=0).cumcount()+1
 
+# Move NDay volume info to new columns
 conditions = [
-        ((temp.TempRow == 1) & (temp['DailyIsCondition'].str.upper() == 'YES')),
-        ((temp.TempRow == 2) & (temp['WeeklyIsCondition'].str.upper() == 'YES')),
-        ((temp.TempRow == 3) & (temp['30DayIsCondition'].str.upper() == 'YES')),
-        ((temp.TempRow == 4) & (temp['150DayIsCondition'].str.upper() == 'YES')),
-        ((temp.TempRow == 5) & (temp['CustomVol_m3'].notnull()))
+    ((temp.TempRow == 1) & (temp['DailyIsCondition'].str.upper() == 'YES')),
+    ((temp.TempRow == 2) & (temp['WeeklyIsCondition'].str.upper() == 'YES')),
+    ((temp.TempRow == 3) & (temp['30DayIsCondition'].str.upper() == 'YES')),
+    ((temp.TempRow == 4) & (temp['150DayIsCondition'].str.upper() == 'YES')),
+    ((temp.TempRow == 5) & (temp['CustomVol_m3'].notnull()))
                ]
 choicesNVol = [
                temp['DailyVol_m3'],
@@ -210,13 +243,22 @@ choicesNDay = [1,7,30,150,temp['CustomPeriodDays']]
 temp['WAPNVol'] = np.select(conditions, choicesNVol, default = np.nan)
 temp['WAPNDay'] = np.select(conditions, choicesNDay, default = np.nan)
 
+# Remove rows w/o Nday volume
 temp = temp[pd.notnull(temp['WAPNDay'])]
 
-temp = pd.merge(temp, WAPLink, on = ['ConsentNo','Activity','WAP','WAPToMonth','WAPFromMonth','WAPRate'], how = 'outer')
+# Reinsert WAP allocation records without NDay volume allocation
+temp = pd.merge(temp, WAPLink, on = ['ConsentNo',
+                                     'Activity',
+                                     'WAP',
+                                     'WAPToMonth',
+                                     'WAPFromMonth',
+                                     'WAPRate'
+                                     ], how = 'outer')
 
+# Create marker for WAP level allocation rules
 temp['WAPLimit'] = 1
 
-###need rate stuff too.
+# Drop unused columns
 temp = temp.drop(['DailyVol_m3', 
             'DailyIsCondition', 
             'WeeklyVol_m3',
@@ -230,20 +272,24 @@ temp = temp.drop(['DailyVol_m3',
             'TempRow'
             ], axis=1)
 
+# Overwrite old WAP allocation limit table
 WAPLimit = temp.drop_duplicates(subset =
         ['ConsentNo',
          'WAP',
          'Activity',
          'WAPFromMonth',
-         'WAPToMonth'],keep= 'first') #size is 5514 there are 17 duplicates 34 duplicates across all
+         'WAPToMonth'],keep= 'first')
 
-
+# Print overview of table
 print('\nWAPLimit Table',
       WAPLimit.shape,'\n',
       WAPLimit.nunique(), '\n\n')
 
 
-#Consent Limit Information
+##############################################################################
+### Import ConsentAllocation Limits
+
+# Import table
 ConsentLimitCol = [
         'RecordNumber',
         'Activity',
@@ -279,25 +325,31 @@ ConsentLimit = pdsql.mssql.rd_sql(
                    where_op = ConsentLimitwhere_op,
                    where_in = ConsentLimitImportFilter
                    )
-
+# Format data
 ConsentLimit.rename(columns=ConsentLimitColNames, inplace=True)
 ConsentLimit['ConsentNo'] = ConsentLimit['ConsentNo'] .str.strip().str.upper()
 ConsentLimit['Activity'] = ConsentLimit['Activity'] .str.strip().str.lower()
 
+# Create counter for consent level allocation rules
 ConsentLimit['ConsentLimit'] = 1
 
+# Drop unused records
 ConsentLimit = ConsentLimit.dropna(subset=[
         'ConsentAnnualVol',
         'ConsentRate',
         'ConsentNVol',
         'ConsentNDay'], how='all')
 
+# Print overview of table
 print('\nConsentLimit Table',
       ConsentLimit.shape,'\n',
       ConsentLimit.nunique(), '\n\n')
 
 
-# Location Information
+##############################################################################
+### Import Additional Consent Information
+
+### Import Location Info
 LocationCol = [
         'B1_ALT_ID',
         'AttributeValue'
@@ -321,7 +373,7 @@ Location = pdsql.mssql.rd_sql(
                    col_names = LocationCol,
                    where_in = LocationImportFilter
                    )
-
+# Format data
 Location = Location.drop_duplicates()
 Location.rename(columns=LocationColNames, inplace=True)
 Location['ConsentNo'] = Location['ConsentNo'] .str.strip().str.upper()
@@ -330,12 +382,13 @@ Location['ConsentNo'] = Location['ConsentNo'] .str.strip().str.upper()
 Location = Location.groupby('ConsentNo', as_index=False).agg({'CWMSZone': 'max'})
 Location.rename(columns = {'max':'CWMSZone'}, inplace=True)
 
+# Print overview of table
 print('\nLocation Table ',
       Location.shape,'\n',
       Location.nunique(), '\n\n')
 
 
-# Full Effective Volume
+### Import Full Effective Volume Info
 FEVCol = [
         'RecordNumber',
         'Activity',
@@ -350,7 +403,7 @@ FEVImportFilter = {
         }
 FEVServer = 'SQL2012Prod03'
 FEVDatabase = 'DataWarehouse'
-FEVTable = 'D_ACC_Act_Water_TakeWaterPermitVolume'#'D_ACC_Act_Water_TakeWaterAllocData'
+FEVTable = 'D_ACC_Act_Water_TakeWaterPermitVolume'
 
 FEV = pdsql.mssql.rd_sql(
                    server = FEVServer,
@@ -359,33 +412,24 @@ FEV = pdsql.mssql.rd_sql(
                    col_names = FEVCol,
                    where_in = FEVImportFilter
                    )
+# Format data
 FEV = FEV.drop_duplicates()
 FEV.rename(columns=FEVColNames, inplace=True)
 FEV['ConsentNo'] = FEV['ConsentNo'] .str.strip().str.upper()
 FEV['Activity'] = FEV['Activity'] .str.strip().str.lower()
 
-
+# Aggregate Location table to consent-activity level
 FEV = FEV.groupby(
   ['ConsentNo', 'Activity'], as_index = False
   ).agg({'FEVolume' : 'sum'})
 
-## add environmental risk
-##SQL
-##,(case when ((Activity like '%ground%' and FEVolume>=1500000) or (Activity like '%surface%' and CombinedRate>=100)) then 'High risk' else Null end) as EnvironmentalRisk
-#conditions = [
-#    (Baseline.Activity == 'ground') & (Baseline.FEVolume >=1500000),
-#    (Baseline.Activity == 'surface') & (Baseline.CombinedRate>=100)
-#             ]
-#choices = ['High risk','High risk']
-#Baseline['EnvironmentalRisk'] = np.select(conditions, choices, default = Null)
-#
-
+# Print overview of table
 print('\nFEV Table ',
       FEV.shape,'\n',
       FEV.nunique(), '\n\n')
 
 
-# Adaptive Managment
+### Import Adaptive Managment Info
 AdaptiveManagementCol = [
         'RecordNumber',
         'AllocationBlock'
@@ -399,7 +443,7 @@ AdaptiveManagementImportFilter = {
         }
 AdaptiveManagementServer = 'SQL2012Prod03'
 AdaptiveManagementDatabase = 'DataWarehouse'
-AdaptiveManagementTable = 'D_ACC_Act_Water_TakeWaterPermitVolume'#'D_ACC_Act_Water_TakeWaterAllocData'
+AdaptiveManagementTable = 'D_ACC_Act_Water_TakeWaterPermitVolume'
 
 AdaptiveManagement = pdsql.mssql.rd_sql(
                    server = AdaptiveManagementServer,
@@ -408,13 +452,24 @@ AdaptiveManagement = pdsql.mssql.rd_sql(
                    col_names = AdaptiveManagementCol,
                    where_in = AdaptiveManagementImportFilter
                    )
+# Format data
 AdaptiveManagement = AdaptiveManagement.drop_duplicates()
 AdaptiveManagement.rename(columns=AdaptiveManagementColNames, inplace=True)
-AdaptiveManagement['ConsentNo'] = AdaptiveManagement['ConsentNo'] .str.strip().str.upper()
+AdaptiveManagement['ConsentNo'] = AdaptiveManagement['ConsentNo'].str.strip().str.upper()
 
+# Create list of consents in this financial year with Adaptive management 
 AdManMaster = list(set(AdaptiveManagement['ConsentNo'].values.tolist()))
 
-#pull consent details on Adaptive Managment consents
+# Print overview of table
+print('AdManMaster ', len(AdManMaster),
+      '\n\nAdaptiveManagement Table ',
+      AdaptiveManagement.shape,'\n',
+      AdaptiveManagement.nunique(), '\n\n')
+
+##############################################################################
+### Create table of historical AdMan
+
+# Pull consent details on Adaptive Managment consents
 ConsentAMCol = [
         'B1_ALT_ID',
         'B1_APPL_STATUS',
@@ -443,13 +498,18 @@ ConsentAM = pdsql.mssql.rd_sql(
                    col_names = ConsentAMCol,
                    where_in = ConsentAMImportFilter
                    )
-
+# Format data
 ConsentAM.rename(columns=ConsentAMColNames, inplace=True)
 ConsentAM['ConsentNo'] = ConsentAM['ConsentNo'].str.strip().str.upper()
 
+# Link consent details to the AdMan consent
+AdaptiveManagementHistory = pd.merge(
+                                    AdaptiveManagement, 
+                                    ConsentAM, 
+                                    on = 'ConsentNo', 
+                                    how = 'left')
 
-AdaptiveManagementHistory = pd.merge(AdaptiveManagement, ConsentAM, on = 'ConsentNo', how = 'left')
-
+# Pull location information on AdMan
 LocationAMCol = [
         'B1_ALT_ID',
         'AttributeValue'
@@ -473,40 +533,36 @@ LocationAM = pdsql.mssql.rd_sql(
                    col_names = LocationAMCol,
                    where_in = LocationAMImportFilter
                    )
-
+# Format data
 LocationAM = LocationAM.drop_duplicates()
 LocationAM.rename(columns=LocationAMColNames, inplace=True)
 LocationAM['ConsentNo'] = LocationAM['ConsentNo'] .str.strip().str.upper()
 
 # Aggregate Location table to consent level
-LocationAM = LocationAM.groupby('ConsentNo', as_index=False).agg({'CWMSZone': 'max'})
+LocationAM = LocationAM.groupby(
+                                'ConsentNo', as_index=False
+                                ).agg({'CWMSZone': 'max'})
 LocationAM.rename(columns = {'max':'CWMSZone'}, inplace=True)
 
-AdaptiveManagementHistory = pd.merge(AdaptiveManagementHistory, LocationAM, on = 'ConsentNo', how = 'left')
+# Add location information to AdMan
+AdaptiveManagementHistory = pd.merge(
+                                    AdaptiveManagementHistory, 
+                                    LocationAM, 
+                                    on = 'ConsentNo', 
+                                    how = 'left')
 
+# Export CSV for RMO to monitor AdMan
 AdaptiveManagementHistory.to_csv('AdaptiveManagementHistory.csv')
 
-#AdaptiveManagement['toDate'] = pd.to_datetime(AdaptiveManagement['toDate'], errors = 'coerce')
-#
-#AdaptiveManagement = AdaptiveManagement[AdaptiveManagement['fmDate'] < '2019-07-01']
-#AdaptiveManagement = AdaptiveManagement[AdaptiveManagement['toDate'] < '2018-10-01']
-#AdaptiveManagement = AdaptiveManagement.drop([
-#                                            'Activity',
-#                                            'B1_APPL_STATUS',
-#                                            'fmDate',
-#                                            'toDate',
-#                                            'HolderAddressFullName',
-#                                            'HolderEcanID'
-#                                            ], axis=1)
+# Print overview of table
+print('\n\nAdaptiveManagementHistory Table ',
+      AdaptiveManagementHistory.shape,'\n',
+      AdaptiveManagementHistory.nunique(), '\n\n')
 
+##############################################################################
+### Create Water User Groups (SMG) Info
 
-print('AdManMaster ', len(AdManMaster),
-      '\n\nAdaptiveManagement Table ',
-      AdaptiveManagement.shape,'\n',
-      AdaptiveManagement.nunique(), '\n\n')
-
-
-# Water User Groups (SMG)
+# Import Data
 SMGCol = [
         'B1_ALT_ID',
         'HolderAddressFullName',
@@ -531,13 +587,15 @@ SMG = pdsql.mssql.rd_sql(
                    col_names = SMGCol,
                    where_in = SMGImportFilter
                    )
+# Format data
 SMG = SMG.drop_duplicates()
 SMG.rename(columns=SMGColNames, inplace=True)
 SMG['WUGNo'] = SMG['WUGNo'] .str.strip().str.upper()
 
+# Create list of water user groups
 SMGMaster = SMG['WUGNo'].values.tolist()
 
-
+# Import information on WUG members
 RelCol = [
         'ParentRecordNo',
         'ChildRecordNo'
@@ -560,23 +618,28 @@ Rel = pdsql.mssql.rd_sql(
                    col_names = RelCol,
                    where_in = RelImportFilter
                    )
+# Format data
 Rel = Rel.drop_duplicates()
 Rel.rename(columns=RelColNames, inplace=True)
 Rel['WUGNo'] = Rel['WUGNo'] .str.strip().str.upper()
 Rel['ConsentNo'] = Rel['ConsentNo'] .str.strip().str.upper()
 
+# Add WUG info to member info
 WUG = pd.merge(SMG, Rel, on = 'WUGNo', how = 'inner')
 
-
+# Print overview of table
 print('SMGMaster ', len(SMGMaster),
       '\n\nWUG Table ',
       WUG.shape,'\n',
       WUG.nunique(), '\n\n')
 
+##############################################################################
+### Calculate Model Complexities
 
-# Shared WAP details
+# Join WAP limit info to consent details
 temp = pd.merge(WAPRate, ConsentDetails, on = 'ConsentNo', how = 'inner')
 
+# Aggregate to WAP level to calculate WAP complexities
 SharedWAP = temp.groupby(
   ['WAP'], as_index=False
   ).agg(
@@ -587,6 +650,7 @@ SharedWAP = temp.groupby(
             'HolderEcanID' : pd.Series.nunique,
           }
         )
+# Format data
 SharedWAP.rename(columns = 
          {
           'WAPRate' :'MaxRateSharedWAP',
@@ -595,14 +659,12 @@ SharedWAP.rename(columns =
           'HolderEcanID' : 'ECsOnWAP'
                  },inplace=True)
 
+# Print overview of table
 print('\nSharedWAP Table ',
       SharedWAP.shape,'\n',
       SharedWAP.nunique(), '\n\n')
-#NeighborlyWAP = SharedWAP[(SharedWAP.ConsentsOnWAP > 1) & (SharedWAP.ECsOnWAP > 1) & (SharedWAP.MaxRateSharedWAP >= 5.0)]
 
-
-
-#Shared Consent Details
+# Aggregate to consent level to calculate consent complexities
 SharedConsent = temp.groupby(
         ['ConsentNo'], as_index=False
         ).agg(
@@ -611,18 +673,22 @@ SharedConsent = temp.groupby(
                 'MaxRateProRata': 'sum'
                 }
             )
+# Format data
 SharedConsent.rename(columns = 
          {
           'WAP' :'WAPsOnConsent',
           'MaxRateProRata': 'CombinedConProRataRate'          
          },inplace=True)
 
+# Print overview of table
 print('\nSharedConsent Table ',
       SharedConsent.shape,'\n',
       SharedConsent.nunique(), '\n\n')
 
+##############################################################################
+### Import Timeseries Info from Hydro
 
-# Telemetry Information
+# Import info on timeseries received
 TelemetryCol = [
         'WAP',
         'site',
@@ -651,12 +717,14 @@ Telemetry = pdsql.mssql.rd_sql(
                    from_date= Telemetry_from_date,
                    to_date = Telemetry_to_date
                    )
-
+# Format data
 Telemetry.rename(columns=TelemetryColNames, inplace=True)
 Telemetry['WAP'] = Telemetry['WAP'] .str.strip().str.upper()
 
+# Create counter for meters recieved
 Telemetry['Telemetered'] = 1
 
+# Aggrigate to WAP level to count meters per wap
 Telemetry = Telemetry.groupby(
         ['WAP'], as_index=False
         ).agg(
@@ -669,6 +737,8 @@ Telemetry.rename(columns =
           'Meter' :'T_MetersRecieved',
          },inplace=True)
 
+
+# Import info on timeseries values
 HydroUsageCol = [
         'ExtSiteID',
         'DatasetTypeID',
@@ -700,11 +770,14 @@ HydroUsage = pdsql.mssql.rd_sql(
                    from_date= HydroUsage_from_date,
                    to_date = HydroUsage_to_date
                    )
-
+# Format data
 HydroUsage.rename(columns=HydroUsageColNames, inplace=True)
 HydroUsage['WAP'] = HydroUsage['WAP'] .str.strip().str.upper()
+
+# Create counter for days when some data was recieved
 HydroUsage['Day'] = 1
 
+# Aggregate data to WAP level to get Annual volume and days of data
 HydroUsage = HydroUsage.groupby(
         ['WAP'], as_index=False
         ).agg(
@@ -721,18 +794,22 @@ HydroUsage.rename(columns =
           'Day' : 'T_DaysOfData'
          },inplace=True)
 
+# Add meter information to timeseries info
 Telemetry = pd.merge(HydroUsage, Telemetry, on = 'WAP', how = 'outer')
 
-Telemetry['T_AverageDaysOfData'] = Telemetry['T_DaysOfData']// Telemetry['T_MetersRecieved']
-
+# Calculate average days on each meter
+Telemetry['T_AverageDaysOfData'] = Telemetry['T_DaysOfData'] // Telemetry['T_MetersRecieved']
 Telemetry['T_AverageMissingDays'] = 365 - Telemetry['T_AverageDaysOfData']
 
+# Print overview of table
 print('\nTelemetry Table ',
       Telemetry.shape,'\n',
       Telemetry.nunique(), '\n\n')
 
+##############################################################################
+### Import Well Info
 
-# Well Details
+# Import base info on each WAP
 WellDetailsCol = [
         'Well_No',
         'Status',
@@ -756,18 +833,25 @@ WellDetails = pdsql.mssql.rd_sql(
                    col_names = WellDetailsCol,
                    where_in = WellDetailsImportFilter,
                    )
+# Format data
 WellDetails.rename(columns=WellDetailsColNames, inplace=True)
 WellDetails['WAP'] = WellDetails['WAP'] .str.strip().str.upper()
 
+# Reduce Well Status to Active and none.
 conditions = [
         WellDetails['WellStatus'] == 'Active'
                ]
 choices = ['Active']
 WellDetails['WellStatus'] = np.select(conditions, choices, default = np.nan)
 
-WellDetails['ChildMeter'] = np.where(WellDetails['GWuseAlternateWell'] != WellDetails['WAP'], 'Yes', np.nan)
+# Calculate shared meters
+WellDetails['ChildMeter'] = np.where(
+        WellDetails['GWuseAlternateWell'] != WellDetails['WAP'],
+        'Yes', np.nan)
 
-WellDetails['SharedMeterName']  = np.where(WellDetails['GWuseAlternateWell'] != WellDetails['WAP'], WellDetails['GWuseAlternateWell'], np.nan)
+WellDetails['SharedMeterName']  = np.where(
+        WellDetails['GWuseAlternateWell'] != WellDetails['WAP'], 
+        WellDetails['GWuseAlternateWell'], np.nan)
 
 SharedMeter = WellDetails[['SharedMeterName']]
 SharedMeter= SharedMeter.dropna()
@@ -777,22 +861,23 @@ SharedMeter.rename(columns={"SharedMeterName": "WAP"}, inplace= True)
 
 WellDetails = pd.merge(WellDetails, SharedMeter, on = ['WAP'], how = 'left')
 
-
 WellDetails['SharedMeter'] = np.where(
-       (( WellDetails['ParentMeter'] == 'Yes') | (WellDetails['ChildMeter'] == 'Yes')), 
+       (( WellDetails['ParentMeter'] == 'Yes') |
+               (WellDetails['ChildMeter'] == 'Yes')), 
         'Yes', np.nan)
        
-
-
-
-WellDetails = WellDetails.drop(['GWuseAlternateWell','ParentMeter','SharedMeterName','ChildMeter'], axis=1)
-
+WellDetails = WellDetails.drop([
+                                'GWuseAlternateWell',
+                                'ParentMeter',
+                                'SharedMeterName',
+                                'ChildMeter'], axis=1)
+# Print overview of table
 print('\nWellDetails Table ',
       WellDetails.shape,'\n',
       WellDetails.nunique(), '\n\n')
 
 
-# Waiver
+### Import Waiver Info
 WaiverCol = [
         'Well_No',
         'EPO_LAST_UPDATE',
@@ -815,9 +900,11 @@ Waiver = pdsql.mssql.rd_sql(
                    col_names = WaiverCol,
                    where_in = WaiverImportFilter,
                    )
+# Format data
 Waiver.rename(columns=WaiverColNames, inplace=True)
 Waiver['WAP'] = Waiver['WAP'] .str.strip().str.upper()
 
+# Calculate waiver record edit date
 conditions = [
         ((Waiver['WM_Tmp_Waiver'] == 1) & (Waiver['EPO_LAST_UPDATE'].notnull()))
                ]
@@ -825,6 +912,7 @@ choices = [Waiver['EPO_LAST_UPDATE']]
 Waiver['WaiverEditDate'] = np.select(conditions, choices, default = pd.NaT)
 Waiver['WaiverEditDate'] = pd.to_datetime(Waiver['WaiverEditDate'], errors = 'coerce')
 
+# Calculate valid waivers
 conditions = [
         Waiver['WaiverEditDate'] >= WaiverLimit,
         Waiver['WaiverEditDate'] < WaiverLimit
@@ -832,17 +920,18 @@ conditions = [
 choices = ['Yes', 'OutofDate']
 Waiver['Waiver'] = np.select(conditions, choices, default = np.nan)
 
-
+# Remove extra columns
 Waiver = Waiver.drop(['WM_Tmp_Waiver', 
             'EPO_LAST_UPDATE'
             ], axis=1)
 
+# Print overview of table
 print('\nWaiver Table ',
       Waiver.shape,'\n',
       Waiver.nunique(), '\n\n')
 
 
-#Verification
+### Import Verification Info
 VerificationCol = [
         'Well_No',
         'DateVerified'
@@ -863,9 +952,11 @@ Verification = pdsql.mssql.rd_sql(
                    table = VerificationTable,
                    col_names = VerificationCol
                    )
+# Format data
 Verification.rename(columns=VerificationColNames, inplace=True)
 Verification['WAP'] = Verification['WAP'] .str.strip().str.upper()
 
+# Filter to latest verification
 Verification = Verification.groupby(
         ['WAP'], as_index=False
         ).agg({'DateVerified' : 'max'})
@@ -873,6 +964,7 @@ Verification.rename(columns =
          {'DateVerified' :'LatestVerification',
          },inplace=True)
 
+# Calculate valid verifications
 conditions = [
         Verification['LatestVerification'] > VerificationLimit,
         (( Verification['LatestVerification'] <= VerificationLimit) | 
@@ -881,12 +973,13 @@ conditions = [
 choices = ['No' , 'Yes']
 Verification['VerificationOutOfDate'] = np.select(conditions, choices, default = 'Yes')
 
+# Print overview of table
 print('\nVerification Table ',
       Verification.shape,'\n',
       Verification.nunique(), '\n\n')
 
 
-#WELLS Meters
+### Import WELLS Meters Info
 MeterCol = [
         'Well_No',
         'DateInstalled',
@@ -908,23 +1001,29 @@ Meter = pdsql.mssql.rd_sql(
                    table = MeterTable,
                    col_names = MeterCol
                    )
+# Format data
 Meter.rename(columns=MeterColNames, inplace=True)
 Meter['WAP'] = Meter['WAP'] .str.strip().str.upper()
 
-#list of current meters
+# Remove meters that have been uninstalled
 Meter = Meter[Meter.DateDeInstalled.isnull()]
+
+# Create counter for meters
 Meter['MetersInstalled'] = 1
 
+# Aggrigate to WAP level for total installed meters per WAP 
 Meter = Meter.groupby(
         ['WAP'],as_index=False
         ).agg({'MetersInstalled' : 'count'})
 
+
+# Print overview of table
 print('\nMeter Table ',
       Meter.shape,'\n',
       Meter.nunique(), '\n\n')
 
 
-# DataLogger Information
+### Import DataLogger Info
 DataLoggerCol = [
         'ID',
         'LoggerID',
@@ -949,24 +1048,32 @@ DataLogger = pdsql.mssql.rd_sql(
                    col_names = DataLoggerCol,
                    where_in = DataLoggerImportFilter
                    )
+# Format data
 DataLogger.rename(columns=DataLoggerColNames, inplace=True)
 DataLogger['WAP'] = DataLogger['WAP'] .str.strip().str.upper()
 
-#filter
+# Remove assumed dataloggers
 DataLogger = DataLogger[DataLogger.LoggerID > 1]
+
+# Remove uninstalled dataloggers
 DataLogger = DataLogger[DataLogger['DateDeinstalled'].isnull()]
+
+# Create counter for dataloggers
 DataLogger['DataLoggersInstalled'] = 1
 
+# Aggrigate to WAP level for total dataloggers per WAP
 DataLogger = DataLogger.groupby(['WAP'],as_index=False
                                 ).agg({'DataLoggersInstalled' : 'count'})
 
-
+# Print overview of table
 print('\nDataLogger Table',
       DataLogger.shape,'\n',
       DataLogger.nunique(), '\n\n')
 
+##############################################################################
+### Import Inspection History Info
 
-# Inspection History
+# Import Inspections
 InspectionCol = [
         'InspectionID',
         'B1_ALT_ID',
@@ -1003,23 +1110,28 @@ Inspection = pdsql.mssql.rd_sql(
                    date_col = Inspection_date_col,
                    from_date = Inspection_from_date
                    )
+# Format data
 Inspection.rename(columns=InspectionColNames, inplace=True)
 Inspection['ConsentNo'] = Inspection['ConsentNo'] .str.strip().str.upper()
 
+# Reduce list to only Inspection type records
 Inspection = Inspection[Inspection['RecordType'].str.contains('Inspection')]
+
+# Create counter for inspections
 Inspection['Inspection'] = 1
 
+# Calculate inspections with Non-compliance grade
 Inspection['NonCompliance'] = np.where(
         Inspection['InspectionStatus'].str.contains('on-comp'),1, np.nan)
 
+# Calculate date of inspections with non-compliance grade
 Inspection['NonComplianceDate'] = np.where(
         Inspection['InspectionStatus'].str.contains('on-comp'),
         Inspection['InspectionCompleteDate'], pd.NaT)
-
 Inspection['NonComplianceDate'] = pd.to_datetime(
         Inspection['NonComplianceDate'], errors = 'coerce')
 
-
+# Aggrigate to consent level to find latest inspection statistics
 NonCompliance = Inspection.groupby(
   ['ConsentNo'], as_index=False
   ).agg(
@@ -1030,7 +1142,6 @@ NonCompliance = Inspection.groupby(
           'NonComplianceDate' : 'max',
           }
         )
-
 NonCompliance.rename(columns = 
          {
           'Inspection' : 'TotalInspections',
@@ -1039,29 +1150,39 @@ NonCompliance.rename(columns =
           'NonComplianceDate' : 'LatestNonComplianceDate',
                  },inplace=True)
 
+# Print overview of table
 print('\nNonCompliance Table ',
       NonCompliance.shape,'\n',
       NonCompliance.nunique(), '\n\n')
 
+##############################################################################
+### Import information from teams not stored in datawarehouse
 
-# Campaign Participants
+### Import Campaign Participants
+# Import data from campaigns team
 CampaignConsent = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\CampaignConsents.csv")
 CampaignWAP = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\CampaignWAPs.csv")
 
+# Remove duplicates
 CampaignConsent = CampaignConsent.drop_duplicates(subset =
         ['ConsentNo',],keep= 'first')
 CampaignWAP = CampaignWAP.drop_duplicates(subset =
         ['WAP',],keep= 'first')
 
+# Print overview of tables
 print('CampaignConsent ', CampaignConsent.shape, '\n',
       CampaignConsent.nunique(), '\n\n')
 print('CampaignWAP ', CampaignWAP.shape, '\n',
       CampaignWAP.nunique(), '\n\n')
 
-# Midseason inspections
+### Import Midseason Inspections
+# Import data from inspections team
 MidseasonInspections = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\MidseasonInspections.csv")
 
-#Summary Table
+##############################################################################
+### Import Summary Table
+
+### Import Consent Summary Table
 ConsentSummaryCol = [
         'SummaryConsentID',
         'Consent',
@@ -1076,12 +1197,12 @@ ConsentSummaryCol = [
 #        'TotalVolumeAboveRestriction',
 #        'TotalDaysAboveRestriction',
 #        'TotalVolumeAboveNDayVolume', #unreliable. not used previous years
-#        'TotalDaysAboveNDayVolume', #unreliable. not used previous years
+        'TotalDaysAboveNDayVolume', # added for second run
 #        'MaxVolumeAboveNDayVolume', #unreliable. not used previous years
 #        'MedianVolumeAboveNDayVolume', #unreliable. not used previous years
         'PercentAnnualVolumeTaken',
-        'TotalTimeAboveRate', #not used previous years
-        'MaxRateTaken',
+        'TotalTimeAboveRate', # not used previous years
+        'MaxRateTaken', 
         'MedianRateTakenAboveMaxRate' #not available in previous year
         ]
 ConsentSummaryColNames = {
@@ -1115,21 +1236,25 @@ ConsentSummary = pdsql.mssql.rd_sql(
                    to_date = ConsentSummary_to_date
                    )
 
+# Format data
 ConsentSummary.rename(columns=ConsentSummaryColNames, inplace=True)
 ConsentSummary['ConsentNo'] = ConsentSummary['ConsentNo'] .str.strip().str.upper()
 ConsentSummary['Activity'] = ConsentSummary['Activity'] .str.strip().str.lower()
 
+# Calculate usage statistics
 ConsentSummary['CS_PercentMaxRate'] = (
         ConsentSummary['CS_MaxRate']/ConsentSummary['ConsentRate'])*100 
 ConsentSummary['CS_PercentMedRate'] = (
         ConsentSummary['CS_MedianRateAbove']/ConsentSummary['ConsentRate'])*100
 
+# Print overview of table
 print('\nConsentSummary Table ',
       ConsentSummary.shape,'\n',
       ConsentSummary.nunique(), '\n\n')
 
 # SummaryConsent = SummaryConsent[SummaryConsent['RunDate'] == SummaryTableRunDate]
 
+### Import WAP Summary Table
 WAPSummaryCol = [
         'SummaryWAPID',
         'Consent',
@@ -1146,11 +1271,11 @@ WAPSummaryCol = [
 #        'TotalVolumeAboveRestriction',
 #        'TotalDaysAboveRestriction',
 #        'TotalVolumeAboveNDayVolume', #unreliable. not used previous years
-#        'TotalDaysAboveNDayVolume', #unreliable. not used previous years
+        'TotalDaysAboveNDayVolume', # Hope to use
 #        'MaxVolumeAboveNDayVolume', #unreliable. not used previous years
 #        'MedianVolumeTakenAboveMaxVolume', #unreliable. not used previous years
         'TotalTimeAboveRate', #not used previous years
-        'MaxRateTaken',#not used previous years
+        'MaxRateTaken',# Now unreliable. not used previous years
         'MedianRateTakenAboveMaxRate', #not available in previous year
         'TotalMissingRecord'#unreliable.
         ]
@@ -1187,65 +1312,35 @@ WAPSummary = pdsql.mssql.rd_sql(
                    from_date= WAPSummary_from_date,
                    to_date = WAPSummary_to_date
                    )
-
+# Format data
 WAPSummary.rename(columns=WAPSummaryColNames, inplace=True)
 WAPSummary['ConsentNo'] = WAPSummary['ConsentNo'] .str.strip().str.upper()
 WAPSummary['Activity'] = WAPSummary['Activity'] .str.strip().str.lower()
 WAPSummary['WAP'] = WAPSummary['WAP'] .str.strip().str.upper()
 
+# Calculate usage stattistics
 WAPSummary['WS_PercentMaxRoT'] = (
         WAPSummary['WS_MaxRate']/WAPSummary['WAPRate'])*100
 WAPSummary['WS_PercentMedRate'] = (
-        WAPSummary['WS_MedianRateAbove']/WAPSummary.WAPRate)*100        
-
+        WAPSummary['WS_MedianRateAbove']/WAPSummary.WAPRate)*100   
+        
+# Print overview of table
 print('\nWAPSummary Table ',
       WAPSummary.shape,'\n',
       WAPSummary.nunique(), '\n\n')
 
+                                              
 
 
+##############################################################################
+# Join Tables
+##############################################################################
 
-#
-## label 5ls
-##where 
-##  (CombinedRate is null and MaxRate >= 5) 
-##  or
-##  CombinedRate>=5 -- what about where there is no proper rate, or rate is crazy small?
-#
-#conditions = [
-#    (Baseline.CombinedRate == Null) & (Baseline.MaxRate >= 5),
-#    (Baseline.CombinedRate >= 5)
-#             ]
-#choices = ['Above','Above']
-#Baseline['FiveLS'] = np.select(conditions, choices, default = 'Under')
-#
-#TempConsent = Baseline.loc[Baseline['FiveLS'] == 'Over']
-#                 
-
-
-          
-##
-## SQL
-## (Case when (COUNT(Distinct([From Month]))>1 or  COUNT( DISTINCT([To Month]))>1) then Max([Max Rate for WAP (l/s)]) else Null end) as MaxOfDifferentPeriodRate
-#conditions = [
-#    (Baseline.ToMonthCount > 1),
-#    (Baseline.FromMonthCount > 1)
-#             ]
-#choices = [Baseline['WAPRate'],Baseline['WAPRate']]
-#Baseline['FiveLS'] = np.select(conditions, choices, default = np.nan)
-                           
-                           
-
-
-###########################################################
-#Joining Tables
-###########################################################
-# build Consent level information
+### Build Consent-Activity level allocation limit information
 AllLimit = pd.merge(ConsentLimit, WAPLimit, on = ['ConsentNo','Activity'], how = 'outer')
 AllLimit = pd.merge(AllLimit, FEV, on = ['ConsentNo','Activity'], how = 'left')
 
-#AllSummary = pd.merge(ConsentSummary, WAPSummary, on = ['ConsentNo','Activity'], how = 'outer')
-
+### Build Consent level information
 Consent = pd.merge(ConsentBase, ConsentDetails, on = 'ConsentNo', how = 'left')
 Consent = pd.merge(Consent, Location, on = 'ConsentNo', how = 'left')
 Consent = pd.merge(Consent, AdaptiveManagement, on = 'ConsentNo', how = 'left')
@@ -1255,6 +1350,7 @@ Consent = pd.merge(Consent, SharedConsent, on = 'ConsentNo' , how = 'left' )
 Consent = pd.merge(Consent, CampaignConsent, on = 'ConsentNo' , how = 'left' )
 Consent = pd.merge(Consent, MidseasonInspections, on = 'ConsentNo' , how = 'left' )
 
+### Build WAP level information
 WAP = pd.merge(WAPBase, WellDetails, on = 'WAP', how = 'left')
 WAP = pd.merge(WAP, SharedWAP, on = 'WAP', how = 'left')
 WAP = pd.merge(WAP, Meter, on = 'WAP', how = 'left')
@@ -1264,13 +1360,11 @@ WAP = pd.merge(WAP, Waiver, on = 'WAP', how = 'left')
 WAP = pd.merge(WAP, Telemetry, on = 'WAP', how = 'left')
 WAP = pd.merge(WAP, CampaignWAP, on = 'WAP', how = 'left')
 
+### Merge 3 levels
 Baseline = pd.merge(WAP, AllLimit, on = 'WAP', how = 'right')
 Baseline = pd.merge(Consent, Baseline, on = 'ConsentNo', how = 'right')
 
-#Baseline = pd.merge(Baseline, AllSummary, 
-#        on = ['ConsentNo','WAP','Activity','WAPFromMonth','WAPToMonth','WAPRate'], 
-#        how = 'left')
-
+### Add summary table information
 Baseline = pd.merge(Baseline, ConsentSummary, 
         on = ['ConsentNo','Activity','ConsentRate',], 
         how = 'left')
@@ -1278,53 +1372,30 @@ Baseline = pd.merge(Baseline, WAPSummary,
         on = ['ConsentNo','WAP','Activity','WAPFromMonth','WAPToMonth','WAPRate'], 
         how = 'left')
 
-Baseline.to_csv('Baseline.csv')
+# Export Baseline
+Baseline.to_csv('Baseline' + RunDate + '.csv')
 
+# Print overview of table
 print('\nBaseline Table ',
       Baseline.shape,'\n',
       Baseline.nunique(), '\n\n')
 
-####################################################################################
-############################################################################
+###############################################################################
+### End.
+###############################################################################
 
-
-#Baseline = pd.merge(Baseline, AllSummary, 
-#        on = ['ConsentNo','WAP','Activity','WAPFromMonth','WAPToMonth','WAPRate'], 
-#        how = 'left')
-#
-  
-  
-#© 2019 GitHub, Inc.
-#Terms
-#Privacy
-#Security
-#Status
-#Help
-#Contact GitHub
-#Pricing
-#API
-#Training
-#Blog
-#About
-#© 2019 GitHub, Inc.
-
-#
-#example = pd.DataFrame([
-#        ['Mr. Smith', 'Mr. Smith','Mr. Jones','Mr. Jones','Mr. Jones'], 
-#        ['CRC1','CRC1','CRC2','CRC3','CRC3'], 
-#        ['NCx','NCy','NCx','NCy','NCz']
-#        ]).T
-#
-#output = pd.DataFrame([
-#        ['Mr. Smith', 'Dear Mr. Smith, there is NCx and NCy on CRC1'], 
-#        ['Mr.Jones', 'Dear Mr. Jones, there is NCx on CRC2 and NCy and NCz on CRC3']
-#        ])
-#
-#ex2 = example.groupby([0, 1])[2].apply(lambda x: ', and '.join(x))
-#ex2 = example.groupby([0, 1])[2].apply(lambda x: ', and '.join(x)).reset_index()
-#ex2['crc_nc'] = ex2[1] + ' has ' + ex2[2]
-#ex2.groupby(0).crc_nc.apply(lambda x: ', and '.join(x))
-#
-#
-#'CRC1 has NCx and NCy'
-#'CRC2 has NCx. CRC3 has NCy and NCz'
+"""
+© 2019 GitHub, Inc.
+Terms
+Privacy
+Security
+Status
+Help
+Contact GitHub
+Pricing
+API
+Training
+Blog
+About
+© 2019 GitHub, Inc.
+"""
