@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, date
 ### Set Variables
 ##############################################################################
 
-ReportName= 'Water Inspection Prioritzation Model'
+ReportName= 'Water Inspection Prioritzation Model - Baseline'
 RunDate = str(date.today())
 #ConsentMaster = []
 #WAPMaster = []
@@ -113,7 +113,7 @@ conditions = [
 choices = ['Child' , 'Parent']
 ConsentDetails['ParentorChild'] = np.select(conditions, choices, default = np.nan)
 choices2 = [ConsentDetails['ChildAuthorisations'] ,ConsentDetails['ParentAuthorisations']]
-ConsentDetails['ParentChildConsent'] = np.select(conditions, choices2, default = '')
+ConsentDetails['ParentChildConsent'] = np.select(conditions, choices2, default = ' ')
 
 # Print overview of table
 print('ConsentMaster ', len(ConsentMaster),
@@ -702,7 +702,6 @@ TelemetryImportFilter = {
         }
 Telemetry_date_col = 'end_date'
 Telemetry_from_date = TelemetryFromDate
-Telemetry_to_date = TelemetryToDate
 TelemetryServer = 'EDWProd01'
 TelemetryDatabase = 'Hydro'
 TelemetryTable = 'HilltopUsageSiteDataLog'
@@ -714,8 +713,7 @@ Telemetry = pdsql.mssql.rd_sql(
                    col_names = TelemetryCol,
                    where_in = TelemetryImportFilter,
                    date_col = Telemetry_date_col,
-                   from_date= Telemetry_from_date,
-                   to_date = Telemetry_to_date
+                   from_date= Telemetry_from_date
                    )
 # Format data
 Telemetry.rename(columns=TelemetryColNames, inplace=True)
@@ -797,9 +795,16 @@ HydroUsage.rename(columns =
 # Add meter information to timeseries info
 Telemetry = pd.merge(HydroUsage, Telemetry, on = 'WAP', how = 'outer')
 
+# fill missing meters
+Telemetry = pd.merge(WAPBase, Telemetry, on = 'WAP', how = 'outer')
+
+
 # Calculate average days on each meter
 Telemetry['T_AverageDaysOfData'] = Telemetry['T_DaysOfData'] // Telemetry['T_MetersRecieved']
 Telemetry['T_AverageMissingDays'] = 365 - Telemetry['T_AverageDaysOfData']
+
+
+Telemetry['T_AverageMissingDays'] = Telemetry['T_AverageMissingDays'].fillna(value=365)
 
 # Print overview of table
 print('\nTelemetry Table ',
@@ -1210,6 +1215,7 @@ ConsentSummaryColNames = {
         'Consent' : 'ConsentNo',
         'ErrorMsg' : 'CS_ErrorMSG',
         'MaxTakeRate' : 'ConsentRate',
+        'TotalDaysAboveNDayVolume' : 'CS_DaysAboveNday',
         'PercentAnnualVolumeTaken': 'CS_PercentAnnualVolume',
         'TotalTimeAboveRate' : 'CS_TimeAboveRate', #not used previous years
         'MaxRateTaken' : 'CS_MaxRate',
@@ -1287,9 +1293,10 @@ WAPSummaryColNames = {
         'ToMonth' : 'WAPToMonth',
         'MeterName' : 'WS_MeterName',
         'ErrorMsg' : 'WS_ErrorMsg',
+        'TotalDaysAboveNDayVolume' : 'WS_DaysAboveNday',
         'TotalTimeAboveRate' : 'WS_TimeAboveRate',
-        'MaxRateTaken' : 'WS_MaxRate',#not used previous years
-        'MedianRateTakenAboveMaxRate' : 'WS_MedianRateAbove', #not available in previous year
+        'MaxRateTaken' : 'WS_MaxRate', # not used previous years
+        'MedianRateTakenAboveMaxRate' : 'WS_MedianRateAbove', # not available in previous year
         'TotalMissingRecord' : 'WS_TotalMissingRecord'
         }
 WAPSummaryImportFilter = {

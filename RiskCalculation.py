@@ -3,46 +3,75 @@
 Created on Mon 19 August 2019
 @author: KatieSi
 """
-#reset
-#clear
 
-# Import packages
+##############################################################################
+### Import Packages
+##############################################################################
+
 import numpy as np
 import pandas as pd
 import pdsql
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import random
 
-# Set Variables
-ReportName= 'Water Inspection Prioritzation Model'
-RunDate = datetime.now()
-FirstRunCount = 540
-SecondRunCount = 520
+
+##############################################################################
+### Set Variables
+##############################################################################
+
+# Base Variable
+ReportName= 'Water Inspection Prioritzation Model - Risk Calculation'
+RunDate = str(date.today())
+
+### Baseline File
+BaselineFile = 'Baseline2019-09-05.csv'
+
+### Allocation totals per fortnight
+FirstRunCountF1 = 625
+FirstRunCountF2 = 616
+SecondRunCountF3 = 632
+SecondRunCountF4 = 632
+SecondRunCountF5 = 616
+
+
+FortnightDate1 = '2019-09-09'
+FortnightDate2 = '2019-09-23'
+
+
+##############################################################################
+### Import data
+##############################################################################
 
 #Iplaod baseline
-#Segmentation = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Export\\Baseline.csv")
-Segmentation = Baseline
-
-# Consent Risk
-
+Segmentation = pd.read_csv(
+        r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\" +
+        BaselineFile)
 
 
-## Campaign Risk
+##############################################################################
+### Calculate Consent Level Warnings on Complexity
+##############################################################################
+
+### Campaign Warning
 HighRiskCamp = 'Warning'
 LowRiskCamp = ''
 
 conditions = [
 	((Segmentation['ConsentProject'].isnull()) &
-	(Segmentation['WAPProject'].isnull()))# could be double counted by inspections
+	(Segmentation['WAPProject'].isnull()))
              ]
 choices = [LowRiskCamp]
-Segmentation['CampaignRisk'] = np.select(conditions, choices, default = HighRiskCamp)
+Segmentation['CampaignRisk'] = np.select(
+                                            conditions, 
+                                            choices, 
+                                            default = HighRiskCamp)
 
-# Midseason Risk
+
+### Midseason Warning
 Segmentation.loc[Segmentation['InspectionID'].notnull(), 'MidSeasonRisk'] = 'Warning'
 
 
-##Water User Group
+### Water User Group Warning
 HighRiskWUG = 'Warning'
 LowRiskWUG = ''
 
@@ -53,7 +82,7 @@ choices = [LowRiskWUG]
 Segmentation['WUGRisk'] = np.select(conditions, choices, default = HighRiskWUG)
 
 
-## Adaptive Management
+### Adaptive Management Warning
 HighRiskAM = 'Warning'
 LowRiskAM = ''
 
@@ -64,70 +93,7 @@ choices = [LowRiskAM]
 Segmentation['AMRisk'] = np.select(conditions, choices, default = HighRiskAM)
 
 
-
-##Location Risk
-
-#requires this in main body:
-#Location_agg = Location.groupby(
-#	'ConsentNo', as_index=False
-#	).agg({
-#			'CWMSZone': 'max'}
-#			'CWMSZone': 'count')
-#Location_agg.rename(columns = {'max':'CWMSZone', 'count' : 'Locations' }, inplace=True)
-
-#HighRiskLoc = 1
-#MedRiskLoc
-#LowRiskLoc = 0
-#
-#conditions = [
-#	(Baseline.LocationCount == 1),
-#	(Baseline.LocationCount isnull)		 
-#			 ]
-#choices = [LowRiskLoc, HighRiskLoc]
-#Baseline['LocRisk'] = np.select(conditions, choices, default = MedRiskLoc)
-
-
-## Allocation
-HighGWThresholdAllo = 1500000
-LowGWThresholdAllo = 0 #optional
-HighSWThresholdAllo = 100
-LowSWThresholdAllo = 0 #optional
-
-HighRiskAllo = 0
-MedRiskAllo = 0
-LowRiskAllo = 0
-
-conditions = [
-	((Segmentation['Activity'] == 'take groundwater') & (Segmentation['FEVolume'] >= HighGWThresholdAllo)),
-    ((Segmentation['Activity'] == 'take groundwater') & (Segmentation['FEVolume'] < HighGWThresholdAllo)),
-    ((Segmentation['Activity'] == 'take groundwater') & (Segmentation['FEVolume'].isnull())),    
-#	((Segmentation['Activity'] == 'take groundwater') & (Segmentation['FEVolume'] < LowGWThresholdAllo)),
-	((Segmentation['Activity'] == 'take surface water') & 
-          (
-                  (Segmentation['CombinedWAPProRataRate'] >= HighSWThresholdAllo) | 
-                  (Segmentation['CombinedConProRataRate'] >= HighSWThresholdAllo) |
-                  (Segmentation['ConsentRate'] >= HighSWThresholdAllo)
-                  )),
-    ((Segmentation['Activity'] == 'take surface water') & 
-          (
-                  (Segmentation['CombinedWAPProRataRate'].isnull()) & 
-                  (Segmentation['CombinedConProRataRate'].isnull()) &
-                  (Segmentation['ConsentRate'].isnull())
-                  ))
-#	((Segmentation['Activity'] == 'take surface water') & (Segmentation['FEVolume'] < LowSWThresholdAllo))
-			 ]
-choices = [HighRiskAllo,
-           LowRiskAllo,
-           np.nan,
-#           LowRiskAllo, 
-           HighRiskAllo, 
-           np.nan
-#           LowRiskAllo
-]
-Segmentation['AllocationRisk'] = np.select(conditions, choices, default = LowRiskAllo)
-
-
-#Complex Conditions Risk
+### Complex Conditions Warning
 HighRiskConditions = 'Warning'
 LowRiskConditions = ''
 
@@ -136,21 +102,18 @@ conditions = [
     (Segmentation['ComplexAllocations'].isnull() )
 			 ]
 choices = [LowRiskConditions,np.nan]
-Segmentation['ConditionRisk'] = np.select(conditions, choices, default = HighRiskConditions)
+Segmentation['ConditionRisk'] = np.select(
+                                            conditions, 
+                                            choices, 
+                                            default = HighRiskConditions)
 
-## Verification
-HighRiskVerification = 3
-MedRiskVerification = 1
-LowRiskVerification = 0
 
-conditions = [
-	(Segmentation.VerificationOutOfDate == 'No'),
-	(Segmentation.LatestVerification.isnull()),		 
-			 ]
-choices = [LowRiskVerification, HighRiskVerification]
-Segmentation['VerificationRisk'] = np.select(conditions, choices, default = MedRiskVerification)
 
-#Waiver Risk
+##############################################################################
+### Calculate WAP Level Warnings on Complexity
+##############################################################################
+
+### Waiver Warning
 HighRiskWaiver = 'Warning'
 LowRiskWaiver = ''
 
@@ -158,9 +121,13 @@ conditions = [
 	(Segmentation['Waiver'] == 'Yes' ),
 			 ]
 choices = [HighRiskWaiver]
-Segmentation['WaiverRisk'] = np.select(conditions, choices, default = LowRiskWaiver)
+Segmentation['WaiverRisk'] = np.select(
+                                        conditions, 
+                                        choices, 
+                                        default = LowRiskWaiver)
 
-#Shared Meter
+
+### Shared Meter Warning
 HighRiskSharedMeter = 'Warning'
 LowRiskSharedMeter = ''
 
@@ -168,9 +135,13 @@ conditions = [
 	(Segmentation['SharedMeter'] == 'Yes' )
 			 ]
 choices = [HighRiskSharedMeter]
-Segmentation['SharedMeterRisk'] = np.select(conditions, choices, default = LowRiskSharedMeter)
+Segmentation['SharedMeterRisk'] = np.select(
+                                            conditions, 
+                                            choices, 
+                                            default = LowRiskSharedMeter)
 
-#Multiple Meter
+
+### Multiple Meter Warning
 HighRiskMultiMeter = 'Warning'
 LowRiskMultiMeter = ''
 
@@ -178,10 +149,13 @@ conditions = [
 	(Segmentation['T_MetersRecieved'] > 1)
 			 ]
 choices = [HighRiskSharedMeter]
-Segmentation['MultipleMeterRisk'] = np.select(conditions, choices, default = LowRiskSharedMeter)
+Segmentation['MultipleMeterRisk'] = np.select(
+                                            conditions, 
+                                            choices, 
+                                            default = LowRiskSharedMeter)
 
                             
-#Shared WAP
+### Shared WAP Warning
 HighRiskSharedWAP = 'Warning'
 LowRiskSharedWAP = ''
 
@@ -189,10 +163,13 @@ conditions = [
 	(Segmentation['ConsentsOnWAP'] > 1 ),
 			 ]
 choices = [HighRiskSharedWAP]
-Segmentation['SharedWAPRisk'] = np.select(conditions, choices, default = LowRiskSharedWAP)
+Segmentation['SharedWAPRisk'] = np.select(
+                                            conditions, 
+                                            choices, 
+                                            default = LowRiskSharedWAP)
 
 
-#Risk under 5ls
+### Under 5ls Warning
 HighRiskUnder5ls = 'Warning'
 LowRiskSharedUnder5ls = ''
 
@@ -200,37 +177,51 @@ conditions = [
 	(Segmentation['WAPRate'] < 5),
 			 ]
 choices = [HighRiskSharedMeter]
-Segmentation['Under5lsRisk'] = np.select(conditions, choices, default = LowRiskSharedMeter)
+Segmentation['Under5lsRisk'] = np.select(
+                                        conditions, 
+                                        choices, 
+                                        default = LowRiskSharedMeter)
 
-# Inspection History Risk
 
-#needs to considor inspections scheduled but never done and inspections on going
-#latest inspection date
-#count inspections
-#count non-compliance
-#count compliance
+##############################################################################
+### Calculate Consent Level Priorities
+##############################################################################
 
-#Inspection Date Risk
+### Inspection Date Priority
 DateThresholdLatestInspection = datetime.strptime('2018-07-01', '%Y-%m-%d')
 HighRiskLatestInspection = 3
 MedRiskLatestInspection = 1
 LowRiskLatestInspection = 0
+
+Segmentation['LatestInspection'] = pd.to_datetime(
+                                        Segmentation['LatestInspection'], 
+                                        errors='coerce')
 
 conditions = [
 	(Segmentation['LatestInspection'] <= DateThresholdLatestInspection),
 	(Segmentation['LatestInspection'] > DateThresholdLatestInspection),
     (Segmentation['LatestInspection'].isnull())
 			 ]
-choices = [LowRiskLatestInspection, MedRiskLatestInspection,HighRiskLatestInspection]
-Segmentation['LatestInspectionRisk'] = np.select(conditions, choices, default = np.nan)
+choices = [LowRiskLatestInspection, 
+           MedRiskLatestInspection,
+           HighRiskLatestInspection]
+Segmentation['LatestInspectionRisk'] = np.select(
+                                                conditions, 
+                                                choices, 
+                                                default = np.nan)
 
 
-# Non Comp Date risk
+### Non-Compliant Inspection Date Priority
 DateThresholdLatestNonComp = datetime.strptime('2018-07-01', '%Y-%m-%d')
 
 HighRiskLatestNonComp = 3
 MedRiskLatestNonComp = 1
 LowRiskLatestNonComp = 0
+
+
+Segmentation['LatestNonComplianceDate'] = pd.to_datetime(
+                                        Segmentation['LatestNonComplianceDate'], 
+                                        errors='coerce')
 
 conditions = [
 	(Segmentation['LatestNonComplianceDate'] < DateThresholdLatestNonComp),
@@ -238,20 +229,12 @@ conditions = [
     (Segmentation['LatestNonComplianceDate'].isnull())
 			 ]
 choices = [HighRiskLatestNonComp,MedRiskLatestNonComp,LowRiskLatestNonComp]
-Segmentation['LatestNonComplianceRisk'] = np.select(conditions, choices, default = np.nan)
+Segmentation['LatestNonComplianceRisk'] = np.select(
+                                                    conditions, 
+                                                    choices, 
+                                                    default = np.nan)
 
-
-##Non comp counts
-##noncmp  records
-#0	4128
-#1	1970
-#2	588
-#3	247
-#4	44
-#5	49
-#6	4
-#7	9
-
+### Non-Compliant Inspection Counts Priority
 HighThresholdNonComp = 3
 LowThresholdNonComp = 1
 HighRiskNonComp = 3
@@ -263,16 +246,38 @@ conditions = [
 	(Segmentation['CountNonCompliance'] > HighThresholdNonComp)
 			]
 choices = [LowRiskNonComp, HighRiskNonComp]
-Segmentation['CountNonComplianceRisk'] = np.select(conditions, choices, default = MedRiskNonComp)
+Segmentation['CountNonComplianceRisk'] = np.select(
+                                                    conditions, 
+                                                    choices, 
+                                                    default = MedRiskNonComp)
 
 
-# No Data Days (Hydro)
-HighThresholdTMR = 10 # was 100
+##############################################################################
+### Calculate WAP Level Priorities
+##############################################################################
+
+### Verification Priority
+HighRiskVerification = 3
+MedRiskVerification = 1
+LowRiskVerification = 0
+
+conditions = [
+	(Segmentation.VerificationOutOfDate == 'No'),
+	(Segmentation.LatestVerification.isnull()),		 
+			 ]
+choices = [LowRiskVerification, HighRiskVerification]
+Segmentation['VerificationRisk'] = np.select(
+                                            conditions,
+                                            choices, 
+                                            default = MedRiskVerification)
+
+
+### Missing Data Days Priority
+HighThresholdTMR = 10
 LowThresholdTMR = 0
-HighRiskTMR = 3 #was 10000
-MedRiskTMR = 1 # was 5
+HighRiskTMR = 3
+MedRiskTMR = 1
 LowRiskTMR = 0
-#OtherRiskMR = 5000
 
 conditions = [
         (Segmentation['T_AverageMissingDays'] > HighThresholdTMR),
@@ -284,14 +289,12 @@ choices = [HighRiskTMR, LowRiskTMR, MedRiskTMR]
 Segmentation['T_MRNC'] = np.select(conditions, choices, default = np.nan)
 
 
-
-#MRNC - zeros vs Nulls. SQL says 0 is null Python says false
-HighThresholdMR = 10 # was 100
+### Missing Data Records Priority
+HighThresholdMR = 10
 LowThresholdMR = 0
-HighRiskMR = 3 #was 10000
-MedRiskMR = 1 # was 5
+HighRiskMR = 3
+MedRiskMR = 1
 LowRiskMR = 0
-#OtherRiskMR = 5000
 
 conditions = [
         (Segmentation['WS_TotalMissingRecord'] > HighThresholdMR),
@@ -303,15 +306,18 @@ choices = [HighRiskMR, LowRiskMR, MedRiskMR]
 Segmentation['WS_MRNC'] = np.select(conditions, choices, default = np.nan)
 
 
-#AVNC
+##############################################################################
+### Calculate Usage Priorities
+##############################################################################
+
+### Percent Annual Volume Used priority
 HighVolumeThresholdAV = 200
 MedVolumeThresholdAV = 110
 LowVolumeThresholdAV = 100
 NoiseRiskAV = 'Warning'
-HighRiskAV = 3 #was 2000
-MedRiskAV = 1 # was 100
+HighRiskAV = 3
+MedRiskAV = 1
 LowRiskAV = 0
-#OtherRiskAV = 1
 
 conditions = [
         (Segmentation['CS_PercentAnnualVolume'] > HighVolumeThresholdAV),
@@ -325,8 +331,7 @@ choices = [NoiseRiskAV, LowRiskAV, MedRiskMR, HighRiskAV]
 Segmentation['CS_AVNC'] = np.select(conditions, choices, default = np.nan)
 
 
-
-#MaxRoTNC
+### Median Rate of Take Over Consent Limit Priority
 HighThresholdMaxRoT = 115
 LowThresholdMaxRoT = 105
 HighRiskMaxRoT = 3 # was 100
@@ -343,6 +348,7 @@ choices = [HighRiskMaxRoT, LowRiskMaxRoT, MedRiskMaxRoT]
 Segmentation['CS_MedRateNC'] = np.select(conditions, choices, default = np.nan)
 
 
+### Median Rate of Take Over WAP Limit Priority
 conditions = [
         (Segmentation['WS_PercentMedRate'] > HighThresholdMaxRoT),
         (Segmentation['WS_PercentMedRate'] < LowThresholdMaxRoT),
@@ -353,55 +359,10 @@ choices = [HighRiskMaxRoT, LowRiskMaxRoT, MedRiskMaxRoT]
 Segmentation['WS_MedRateNC'] = np.select(conditions, choices, default = np.nan)
 
 
-#conditions = [
-#    (pd.isnull(ConsentSummary['ConsentRate'])) | 
-#        (pd.isnull(ConsentSummary['CS_MaxRate'])) | 
-#        (ConsentSummary['CS_PercentMaxRate'] <= LowThresholdMaxRoT),
-#    (ConsentSummary['CS_PercentMaxRate'] > HighThresholdMaxRoT)
-#             ]
-#choices = [LowRiskMaxRoT,HighRiskMaxRoT]
-#ConsentSummary['CS_MaxRoTNC'] = np.select(conditions, choices, default = MedRiskMaxRoT)
-
-#conditions = [
-#    (pd.isnull(WAPSummary['WAPRate'])) | 
-#        (pd.isnull(WAPSummary['WS_MaxRate'])) | 
-#        (WAPSummary['WS_PercentMaxRoT'] <= LowThresholdMaxRoT),
-#    (WAPSummary['WS_PercentMaxRoT'] > HighThresholdMaxRoT)
-#             ]
-#choices = [LowRiskMaxRoT,HighRiskMaxRoT]
-#WAPSummary['WS_MaxRoTNC'] = np.select(conditions, choices, default = MedRiskMaxRoT)
-
-
-##MedRoTNC
-#HighThresholdMedRoT = 105
-#LowThresholdMedRoT = 100
-#HighRiskMedRoT = 100
-#MedRiskMedRoT = 1
-#LowRiskMedRoT = 0
-#  
-#conditions = [
-#    (pd.isnull(ConsentSummary['ConsentRate'])) | 
-#        (pd.isnull(ConsentSummary['CS_MedianRateAbove'])) | 
-#        (ConsentSummary['CS_PercentMedRate'] <= LowThresholdMedRoT),
-#    (ConsentSummary['CS_PercentMedRate'] > HighThresholdMedRoT)
-#             ]
-#choices = [LowRiskMedRoT,HighRiskMedRoT]
-#ConsentSummary['CS_MedRoTNC'] = np.select(conditions, choices, default = MedRiskMedRoT)
-#
-#conditions = [
-#    (pd.isnull(WAPSummary['WAPRate'])) | 
-#        (pd.isnull(WAPSummary['WS_MedianRateAbove'])) | 
-#        (WAPSummary['WS_PercentMedRoT'] <= LowThresholdMedRoT),
-#    (WAPSummary['WS_PercentMedRoT'] > HighThresholdMedRoT)
-#             ]
-#choices = [LowRiskMedRoT,HighRiskMedRoT]
-#WAPSummary['WS_MedRoTNC'] = np.select(conditions, choices, default = MedRiskMedRoT)
-
-
-#TimeRoTNC
-HighThresholdTimeRoT = 14 #advice from Complaince
-LowThresholdTimeRoT = 1 #advice from complaince
-HighRiskTimeRoT = 3 # waas 100
+### Days Over Rate Consent Limit Priority
+HighThresholdTimeRoT = 14
+LowThresholdTimeRoT = 1
+HighRiskTimeRoT = 3
 MedRiskTimeRoT = 1
 LowRiskTimeRoT = 0
 
@@ -414,6 +375,8 @@ conditions = [
 choices = [HighRiskTimeRoT, LowRiskTimeRoT, MedRiskTimeRoT]
 Segmentation['CS_TimeRoTNC'] = np.select(conditions, choices, default = np.nan)
 
+
+### Days Over Rate Consent Limit Priority
 conditions = [
         (Segmentation['WS_TimeAboveRate'] > HighThresholdTimeRoT),
         (Segmentation['WS_TimeAboveRate'] < LowThresholdTimeRoT),
@@ -424,16 +387,58 @@ choices = [HighRiskTimeRoT, LowRiskTimeRoT, MedRiskTimeRoT]
 Segmentation['WS_TimeRoTNC'] = np.select(conditions, choices, default = np.nan)
 
 
+### Days Over NDay Consent Limit Priority
+HighThresholdTimeRoT = 14
+LowThresholdTimeRoT = 1
+HighRiskTimeRoT = 3
+MedRiskTimeRoT = 1
+LowRiskTimeRoT = 0
+
+conditions = [
+        (Segmentation['CS_DaysAboveNday'] > HighThresholdTimeRoT),
+        (Segmentation['CS_DaysAboveNday'] < LowThresholdTimeRoT),
+        ((Segmentation['CS_DaysAboveNday'] > LowThresholdTimeRoT) & 
+        (Segmentation['CS_DaysAboveNday'] <= HighThresholdTimeRoT))
+             ]
+choices = [HighRiskTimeRoT, LowRiskTimeRoT, MedRiskTimeRoT]
+Segmentation['CS_DayNDVNC'] = np.select(conditions, choices, default = np.nan)
+
+
+### Days Over NDay Consent Limit Priority
+conditions = [
+        (Segmentation['WS_DaysAboveNday'] > HighThresholdTimeRoT),
+        (Segmentation['WS_DaysAboveNday'] < LowThresholdTimeRoT),
+        ((Segmentation['WS_DaysAboveNday'] > LowThresholdTimeRoT) & 
+        (Segmentation['WS_DaysAboveNday'] <= HighThresholdTimeRoT))
+             ]
+choices = [HighRiskTimeRoT, LowRiskTimeRoT, MedRiskTimeRoT]
+Segmentation['WS_DayNDVNC'] = np.select(conditions, choices, default = np.nan)
+
+
+##############################################################################
+### Assign Known Catagories
+##############################################################################
+
+### Assign Inspection Run Catagories
+# 1 - first fornight push
+# 2 - not first fornight push
 conditions = [
         ((Segmentation['ConditionRisk'] == 'Warning') |
                 (Segmentation['WUGRisk'] == 'Warning') |
                 (Segmentation['SharedMeterRisk'] == 'Warning')) 
              ]
 choices = [2]
-Segmentation['InspectionAssignment'] = np.select(conditions, choices, default = 1)
-# 1 - first fornight push
-# 2 - not first fornight push
+Segmentation['InspectionAssignment'] = np.select(
+                                                conditions, 
+                                                choices, 
+                                                default = 1)
 
+
+
+### Assign Inspection Necessity Catagories
+# 0 - do not inspect
+# 1 - Sample
+# 2 - must inspect
 conditions = [
         ((Segmentation['CampaignRisk'] == 'Warning') |
                (Segmentation['WUGRisk'] == 'Warning')|
@@ -444,33 +449,48 @@ conditions = [
              )
              ]
 choices = [0,2]
-Segmentation['InspectionNecessity'] = np.select(conditions, choices, default = 1)
-# 0 - do not inspect
-# 1 - Sample
-# 2 - must inspect
+Segmentation['InspectionNecessity'] = np.select(
+                                                conditions, 
+                                                choices, 
+                                                default = 1)
 
 
+
+##############################################################################
+### Calculate Overall Priorities and Complexities
+##############################################################################
+
+### Calculate Overall Complexity
 Segmentation['ComplexityLevel'] = (Segmentation[[
                                                 'ConditionRisk',
                                                 'SharedMeterRisk',
                                                 'MultipleMeterRisk',
-                                                'SharedWAPRisk'
+                                                'SharedWAPRisk',
+                                                'AMRisk'
                                                 ]]== 'Warning').sum(axis=1)
 
 
+### Calculate Overall Priority
 Segmentation['TotalRisk'] = Segmentation[[
                                         'VerificationRisk',
                                         'LatestInspectionRisk',
                                         'LatestNonComplianceRisk',
                                         'CountNonComplianceRisk',
                                         'T_MRNC',
-#                                       'WS_MRNC',
                                         'CS_AVNC',
                                         'CS_MedRateNC',
+                                        'CS_TimeRoTNC', 
+#                                       'CS_DayNDVNC',
+#                                       'WS_MRNC',                                          
 #                                       'WS_MedRateNC',
-                                        'CS_TimeRoTNC',
 #                                       'WS_TimeRoTNC'
+#                                       'WS_DayNDVNC',
                                         ]].sum(axis=1)
+
+
+##############################################################################
+### Create Table of Inspections
+##############################################################################
 
 InspectionList = Segmentation[Segmentation['InspectionNecessity'] != 0]
 
@@ -480,29 +500,133 @@ InspectionList = InspectionList.groupby(
                 'HolderAddressFullName': 'max',
                 'CWMSZone' :'max',
                 'TotalRisk': 'max',
+                'ConsentsOnWAP' : 'max',
+                'WAPsOnConsent' : 'max',
                 'InspectionAssignment' : 'max',
                 'InspectionNecessity' : 'min',
+                'AdMan' :'max',
                 'ComplexityLevel' : 'max'
                 })
 
+##############################################################################
+### Create Inspection Comment
+##############################################################################
 
 
+### Create Base Notes 
+Segmentation['IntroNote'] = ('This consent has been assessed through the 2018/19 inspection allocation model. ')
+Segmentation['ClosingNote'] = ('General comments for CMR**')
+
+### Create consent level notes
+Segmentation['CampaignNote'] = np.where(Segmentation['CampaignRisk'] == 'Warning',
+                                        'Consent is part of an ongoing project and was not selected for inspection. ',
+                                            ' ')
+
+Segmentation['AdManNote'] = np.where(Segmentation['AMRisk'] == 'Warning', 
+            'Contains Adaptive Management Conditions. ',' ')
+
+Segmentation['WUGNote'] = np.where(Segmentation['WUGNo'].notnull(),
+                            ('Member of Water User Group ' + 
+                            Segmentation['WUGNo'] + '-' +
+                            Segmentation['WUGName'] +
+                            '. Monitoring Officer : '+
+                            Segmentation['WUGMonOfficer'] + '. '
+                            ).astype(str),
+                             ' ')
+
+Segmentation['ParentNote'] = np.where(Segmentation['ParentChildConsent'].notnull(), 
+                                ('Consent is related to '+ 
+                                 Segmentation['ParentChildConsent'] + 
+                                 ' on Parent tree. ').astype(str)
+                                ,' ')
+
+Segmentation['WAPCountNote'] = np.where(Segmentation['WAPsOnConsent'] > 1,
+                                (Segmentation['WAPsOnConsent'].astype(str) +
+                                ' WAPS on the consent. ').astype(str),
+                                 ' ')
+
+Segmentation['ConsentNote']  = Segmentation[[
+                                            'IntroNote',
+                                            'CampaignNote',
+                                            'AdManNote',
+                                            'WUGNote',
+                                            'ParentNote',
+                                            'WAPCountNote'
+                                            ]].astype(str).apply(lambda x: ''.join(x), axis=1)
+
+
+### Create WAP level notes                             
+Segmentation['SharedMeterNote'] = np.where(Segmentation['SharedMeterRisk'].notnull(), 
+                            (Segmentation['WAP'] +
+                            ' contains data from other WAPs. '), 
+                            ' ')
+
+Segmentation['MultipleMeterNote'] = np.where(
+                            Segmentation['T_MetersRecieved'] > 1, 
+                            (Segmentation['WAP'] +
+                                 ' has multiple meters reading the usage. '), 
+                            ' ')
+
+Segmentation['SharedWAPNote'] = np.where(Segmentation['ConsentsOnWAP'] > 1, 
+                            (Segmentation['WAP'] +
+                            ' exists on '+
+                            Segmentation['ConsentsOnWAP'].astype(str) +
+                            ' consents active this season. '),
+                            ' ')
+
+Segmentation['VerificationNote'] = np.where(Segmentation['VerificationOutOfDate'] != 'Yes',
+                            ('One of the Verification records  for ' +
+                            Segmentation['WAP'] +
+                            'is either out of date or does not exist. ').astype(str),
+                            ' ')
+
+Segmentation['PoorDataNote'] = np.where(((Segmentation['CS_PercentAnnualVolume'] > 200) | 
+                                        (Segmentation['CS_PercentMedRate'] > 200 )),
+                                ('Suspected data spike or data quality issues on ' +
+                                 Segmentation['WAP'] + '. '),
+                                 ' ')
+                                
+Segmentation['WAPNote']  = Segmentation[[
+                                            'SharedMeterNote',
+                                            'MultipleMeterNote',
+                                            'SharedWAPNote',
+                                            'VerificationNote',
+                                            'PoorDataNote'
+                                            ]].astype(str).apply(lambda x: ''.join(x), axis=1)                                
+
+SegmentationNote = Segmentation[['ConsentNo','WAP','ConsentNote','WAPNote','ClosingNote']]
+
+SegmentationNote = SegmentationNote.groupby(
+        ['ConsentNo','ConsentNote','ClosingNote']
+        )['WAPNote'].apply(lambda x: '\n'.join(x)).reset_index()
+
+SegmentationNote['InspectionNote'] = (SegmentationNote['ConsentNote'] +
+                                     '\n\n' + 
+                                     SegmentationNote['WAPNote'] + 
+                                     '\n\n' +
+                                     SegmentationNote['ClosingNote'])
+
+SegmentationNote = SegmentationNote[['ConsentNo','InspectionNote']]
+
+
+##############################################################################
+### Select First Run of Inspections
+##############################################################################
+
+### Remove Midseason Inspections
 MidSeasonCount = Segmentation[Segmentation['InspectionID'].notnull()]
-MidSeasonCount = len(MidSeasonCount[['ConsentNo']].drop_duplicates())
-Fortnight1 = FirstRunCount-MidSeasonCount
-Fortnight2 = FirstRunCount
 
+### Remove Number of Midseason Inspections from total
+MidSeasonCount = len(MidSeasonCount[['ConsentNo']].drop_duplicates())
+Fortnight1 = FirstRunCountF1-MidSeasonCount
+Fortnight2 = FirstRunCountF2
+
+### Remove all 2nd Run Inspections
 FirstInspections = InspectionList[(InspectionList['InspectionAssignment'] == 1 )]
 
+### Choose Inspections for Fornight 1
 F1Inspections = FirstInspections.sample(n=Fortnight1, weights = 'TotalRisk', random_state = 1)
-
-F1Inspections.to_csv('F1Inspections.csv')
-# import inspection numbers
-
-
 F1Inspections['Fortnight'] = 1
-
-#inspection ID added back on....
 
 F1InspectionsList = F1Inspections[['ConsentNo','Fortnight']]
 
@@ -510,9 +634,13 @@ FirstInspections = pd.merge(FirstInspections, F1InspectionsList, on = 'ConsentNo
 FirstInspections = FirstInspections[(FirstInspections['Fortnight'] != 1)]
 FirstInspections = FirstInspections.drop(['Fortnight'], axis=1)
 
+### Choose Inspections for Fornight 1
 F2Inspections = FirstInspections.sample(n=Fortnight2, weights = 'TotalRisk', random_state = 1)
 F2Inspections['Fortnight'] = 2
 F2InspectionsList = F2Inspections[['ConsentNo','Fortnight']]
+
+
+
 
 InspectionAllocations = pd.concat([
                                 F1InspectionsList,
@@ -527,7 +655,7 @@ Officers = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Im
 
 
 InspectionAllocations.loc[InspectionAllocations['Fortnight'] == 1, 'RMO'] = random.choices(Officers['RMO'],Officers['F1Weight'], k= Fortnight1)
-InspectionAllocations.loc[InspectionAllocations['Fortnight'] == 2, 'RMO'] = random.choices(Officers['RMO'],Officers['F2Weight'], k= FirstRunCount)
+InspectionAllocations.loc[InspectionAllocations['Fortnight'] == 2, 'RMO'] = random.choices(Officers['RMO'],Officers['F2Weight'], k= FirstRunCountF2)
 
 FirstPush = InspectionAllocations[InspectionAllocations['Fortnight'].notnull()]
 
@@ -545,6 +673,7 @@ MidseasonInspectionList = MidseasonInspectionList.groupby(
                 'TotalRisk': 'max',
                 'InspectionAssignment' : 'max',
                 'InspectionNecessity' : 'min',
+                'AdMan' : 'max',
                 'ComplexityLevel' : 'max'
                 })
 
@@ -554,18 +683,70 @@ MidseasonInspectionList = pd.merge(MidseasonInspectionList, MidseasonInspections
 
 MidseasonInspectionList.to_csv('MidseasonInspectionList.csv')
 
+##############################################################################
+### First Allocation
+##############################################################################
 
+
+InspectionAllocations = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\FirstPush-Edit.csv")
+
+Officers = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\Officers.csv")
+
+OfficerLink = Officers[['RMO','AccelaUserID']]
+
+
+InspectionAllocations = pd.merge(InspectionAllocations, OfficerLink, on = 'RMO', how = 'left')
+
+InspectionAllocations = pd.merge(InspectionAllocations, SegmentationNote, on = 'ConsentNo', how = 'left')
+
+InspectionAllocations = pd.merge(InspectionAllocations, InspectionList, on = 'ConsentNo', how = 'left')
+
+conditions = [
+	(InspectionAllocations['Fortnight'] == 1),
+	(InspectionAllocations['Fortnight'] == 2)
+			 ]
+choices = [FortnightDate1, FortnightDate2]
+InspectionAllocations['FortnightDate'] = np.select(conditions, choices, default = np.nan)
+
+InspectionAllocations['Consent'] = InspectionAllocations['ConsentNo']
+InspectionAllocations['InspectionType'] = 'Desk Top Inspection'
+InspectionAllocations['InspectionSubType'] = 'Water Use Data'
+InspectionAllocations['ScheduledDate']  = InspectionAllocations['FortnightDate']
+InspectionAllocations['InspectionDate']  = ' '
+InspectionAllocations['InspectionStatus'] = 'Scheduled'
+InspectionAllocations['AssignedTo'] = InspectionAllocations['AccelaUserID']
+InspectionAllocations['Department'] = ' '
+InspectionAllocations['GeneralComments'] = InspectionAllocations['InspectionNote']
+
+ScheduleInspections = InspectionAllocations[[
+                                              'Consent',
+                                              'InspectionType',
+                                              'InspectionSubType',
+                                              'ScheduledDate',
+                                              'InspectionDate',
+                                              'InspectionStatus',
+                                              'AssignedTo',
+                                              'Department',
+                                              'GeneralComments',
+                                              'ConsentsOnWAP' 
+                                             ]]
+
+
+##############################################################################
+### Second Push
 #############################################################################
-MidseasonInspectionsList = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\MidseasonInspectionsList.csv")
+MidseasonInspectionsList = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\MidseasonInspectionList.csv")
 
-InspectionAllocations = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\FirstPush.csv")
+FirstPush = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\FirstPush.csv")
+
+FirstPushList = FirstPush[['ConsentNo','Fortnight']]
 
 
 
 SecondInspections = InspectionList
 
-SecondInspections = pd.merge(SecondInspections, InspectionAllocations, on = 'ConsentNo', how = 'left')
-SecondInspections = SecondInspections[(SecondInspections['Fortnight'] != 1)|(SecondInspections['Fortnight'] != 2)]
+SecondInspections = pd.merge(SecondInspections, FirstPushList, on = 'ConsentNo', how = 'left')
+SecondInspections = SecondInspections[SecondInspections['Fortnight'].isnull()]
 
 SecondInspections = SecondInspections.drop(['Fortnight'], axis=1)
 
@@ -595,6 +776,7 @@ WUGInspections = Segmentation.groupby(
                 'TotalRisk': 'max',               
                 'InspectionAssignment' : 'max',
                 'InspectionNecessity' : 'min',
+                'ConsentsOnWAP' : 'max',
                 'ComplexityLevel' : 'max'
                 })
  
@@ -613,9 +795,9 @@ WUGGroup4 = WUGInspectionCount[WUGInspectionCount['Fortnight'] == 4].iloc[0,1]
 WUGGroup5 = WUGInspectionCount[WUGInspectionCount['Fortnight'] == 5].iloc[0,1]
 
 
-Fortnight3 = SecondRunCount-NecessaryGroup3 - WUGGroup3
-Fortnight4 = SecondRunCount-NecessaryGroup4 - WUGGroup4
-Fortnight5 = SecondRunCount-NecessaryGroup5 - WUGGroup5
+Fortnight3 = SecondRunCountF3-NecessaryGroup3 - WUGGroup3
+Fortnight4 = SecondRunCountF4-NecessaryGroup4 - WUGGroup4
+Fortnight5 = SecondRunCountF5-NecessaryGroup5 - WUGGroup5
 
 
 
@@ -659,15 +841,30 @@ InspectionAllocations = pd.concat([
                                 F2InspectionsList, 
                                 F3InspectionsList,
                                 F4InspectionsList,
-#                                F5InspectionsList,
+                                F5InspectionsList,
                                 NoInspectionsList
+#                                WUGInspectionList
                                 ])
 
-InspectionList = pd.merge(InspectionList, InspectionAllocations, on = 'ConsentNo', how = 'left')
+
+
+InspectionAllocations = pd.merge(InspectionAllocations, InspectionList, on = 'ConsentNo', how = 'left')
 
 
 Officers = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\Officers.csv")
 
+
+InspectionAllocations.loc[InspectionAllocations['Fortnight'] == 3, 'RMO'] = random.choices(Officers['RMO'],Officers['F1Weight'], k= (SecondRunCount-WUGGroup3))
+InspectionAllocations.loc[InspectionAllocations['Fortnight'] == 2, 'RMO'] = random.choices(Officers['RMO'],Officers['F2Weight'], k= FirstRunCount)
+
+FirstPush = InspectionAllocations[InspectionAllocations['Fortnight'].notnull()]
+
+FirstPush.to_csv('FirstPush.csv')
+
+
+Fortnight3 = SecondRunCount-NecessaryGroup3 - WUGGroup3
+Fortnight4 = SecondRunCount-NecessaryGroup4 - WUGGroup4
+Fortnight5 = SecondRunCount-NecessaryGroup5 - WUGGroup5
 
 
 tempList = InspectionAllocations
@@ -729,97 +926,14 @@ random.choices(['one', 'two', 'three'], [0.2, 0.3, 0.5], k=10)
 
 
 
-# mark which were selected and assigened - InspID and Monitoring Officer
-#campaign Level Notes
-Segmentation['IntroNote'] = ('This consent has been assessed through the 2018/19 inspection allocation model. ')
-Segmentation['CampaignNote'] = np.where(Segmentation['CampaignRisk'] == 'Warning',
-                                        'Consent is part of an ongoing project and was not selected for inspection. ',
-                                            ' ')
-
-Segmentation['AdManNote'] = np.where(Segmentation['AMRisk'] == 'Warning', 
-            'Contains Adaptive Management Conditions. ',' ')
-Segmentation['WUGNote'] = np.where(Segmentation['WUGNo'].notnull(),
-                            (
-                            'Member of Water User Group ' + 
-                            Segmentation['WUGNo'] + '-' +
-                            Segmentation['WUGName'] +
-                            '. Monitoring Officer : '+
-                            Segmentation['WUGMonOfficer'] + '. '
-                            ).astype(str),' ')
-
-Segmentation['ParentNote'] = np.where(Segmentation['ParentChildConsent'] != '', 
-                                ('Consent is related to '+ 
-                                 Segmentation['ParentChildConsent'] + 
-                                 ' on Parent tree. ').astype(str)
-                            ,' ')
-
-
-Segmentation['WAPCountNote'] = np.where(Segmentation['WAPsOnConsent'] > 1,
-                                (Segmentation['WAPsOnConsent'].astype(str) +
-                                ' WAPS on the consent. ').astype(str),
-                                 ' ')
-#Segmentation['ConsentNote2'] = (
-#                                Segmentation['IntroNote'] +
-#                                Segmentation['CampaignNote'] +
-#                                Segmentation['AdManNote']+
-#                                Segmentation['WUGNote'] +                                
-#                                Segmentation['ParentNote'] +
-#                                Segmentation['WAPCountNote']
-#                                )
-#
-Segmentation['ConsentNote']  = Segmentation[[
-                                            'IntroNote',
-                                            'CampaignNote',
-                                            'AdManNote',
-                                            'WUGNote',
-                                            'ParentNote',
-                                            'WAPCountNote'
-                                            ]].astype(str).apply(lambda x: ''.join(x), axis=1)
-
-#data["College"]= data["College"].str.cat(new, sep =", ", na_rep = na_string) 
-
-#WAP level notes                                
-Segmentation['SharedMeterNote'] = np.where(Segmentation['SharedMeterNote'].notnull(), (
-                            Segmentation['WAP'] +
-                            ' contains data from other WAPs. '), 
-                            '')
-
-Segmentation['MultipleMeterNote'] = np.where(Segmentation['T_MetersRecieved'] > 1, (
-                            Segmentation['WAP'] +
-                            ' has multiple meters reading the usage. '), 
-                            '')
-
-Segmentation['SharedWAPNote'] = np.where(Segmentation['ConsentsOnWAP'] > 1, (
-                            Segmentation['WAP'] +
-                            ' exists on '+
-                            Segmentation['ConsentsOnWAP'].astype(str) +
-                            ' consents active this season. '),
-                            '')
-
-Segmentation['VerificationNote'] = np.where(Segmentation['VerificationOutOfDate'] != 'Yes',
-                            'Verification record is either out of date or does not exist. ',
-                            '')
-
-Segmentation['PoorDataNote'] = np.where(((Segmentation['CS_PercentAnnualVolume'] > 200) | 
-                                        (Segmentation['CS_PercentMedRate'] > 200 )),
-                                ('Suspected data spike or data quality issues on ' +
-                                 Segmentation['WAP'] + '. '),
-                                 '')
-                                
-Segmentation['WAPNote']  = Segmentation[[
-                                            'SharedMeterNote',
-                                            'MultipleMeterNote',
-                                            'SharedWAPNote',
-                                            'VerificationNote',
-                                            'PoorDataNote'
-                                            ]].astype(str).apply(lambda x: ''.join(x), axis=1)                                
-
-SegmentationNote = Segmentation[['ConsentNo','WAP','ConsentNote','WAPNote']]
-SegmentationNote = SegmentationNote.groupby(['ConsentNo','ConsentNote'])['WAPNote'].apply(lambda x: '\n'.join(x)).reset_index()
-SegmentationNote['InspectionNote'] = temp['ConsentNote'] + '\n\n' + temp['WAPNote']
 
 
 FirstInspections
+Accela user ID
+Note
+Other columns
+
+extra single inspections
 
 #example = pd.DataFrame([
 #        ['Mr. Smith', 'Mr. Smith','Mr. Jones','Mr. Jones','Mr. Jones'], 
