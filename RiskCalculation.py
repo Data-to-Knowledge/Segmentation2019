@@ -598,12 +598,12 @@ SegmentationNote = Segmentation[['ConsentNo','WAP','ConsentNote','WAPNote','Clos
 
 SegmentationNote = SegmentationNote.groupby(
         ['ConsentNo','ConsentNote','ClosingNote']
-        )['WAPNote'].apply(lambda x: '\n'.join(x)).reset_index()
+        )['WAPNote'].apply(lambda x: ' - '.join(x)).reset_index()
 
 SegmentationNote['InspectionNote'] = (SegmentationNote['ConsentNote'] +
-                                     '\n\n' + 
+                                     '  --  ' + 
                                      SegmentationNote['WAPNote'] + 
-                                     '\n\n' +
+                                     '  --  ' +
                                      SegmentationNote['ClosingNote'])
 
 SegmentationNote = SegmentationNote[['ConsentNo','InspectionNote']]
@@ -730,7 +730,7 @@ ScheduleInspections = InspectionAllocations[[
                                               'GeneralComments',
                                               'ConsentsOnWAP' 
                                              ]]
-
+ScheduleInspections.to_csv('WaterSegmentationInspections' + RunDate +'.csv')
 
 ##############################################################################
 ### Second Push
