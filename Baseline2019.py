@@ -35,7 +35,7 @@ TelemetryFromDate = '2018-07-01'# previous model Jan-1
 TelemetryToDate = '2019-06-30' #non existant in previous model
 InspectionStartDate = '2016-07-01' #'2018-07-13'
 InspectionEndDate = '2019-07-01' #'2019-11-01'
-SummaryTableRunDate = '2019-08-20'
+SummaryTableRunDate = '2019-09-06'#'2019-08-20'
 VerificationLimit = '2014-07-01'
 WaiverLimit = '2018-07-01'
 
@@ -847,35 +847,15 @@ conditions = [
         WellDetails['WellStatus'] == 'Active'
                ]
 choices = ['Active']
-WellDetails['WellStatus'] = np.select(conditions, choices, default = np.nan)
+WellDetails['WellStatus'] = np.select(conditions, choices, default = '')
 
 # Calculate shared meters
-WellDetails['ChildMeter'] = np.where(
-        WellDetails['GWuseAlternateWell'] != WellDetails['WAP'],
-        'Yes', np.nan)
-
-WellDetails['SharedMeterName']  = np.where(
-        WellDetails['GWuseAlternateWell'] != WellDetails['WAP'], 
-        WellDetails['GWuseAlternateWell'], np.nan)
-
-SharedMeter = WellDetails[['SharedMeterName']]
-SharedMeter= SharedMeter.dropna()
-SharedMeter['ParentMeter'] = 'Yes'
-SharedMeter.rename(columns={"SharedMeterName": "WAP"}, inplace= True)
-
-
-WellDetails = pd.merge(WellDetails, SharedMeter, on = ['WAP'], how = 'left')
-
 WellDetails['SharedMeter'] = np.where(
-       (( WellDetails['ParentMeter'] == 'Yes') |
-               (WellDetails['ChildMeter'] == 'Yes')), 
-        'Yes', np.nan)
-       
+        WellDetails['GWuseAlternateWell'] != WellDetails['WAP'],
+        'Yes', '')
+
 WellDetails = WellDetails.drop([
-                                'GWuseAlternateWell',
-                                'ParentMeter',
-                                'SharedMeterName',
-                                'ChildMeter'], axis=1)
+                                'GWuseAlternateWell'], axis=1)
 # Print overview of table
 print('\nWellDetails Table ',
       WellDetails.shape,'\n',
@@ -1228,7 +1208,7 @@ ConsentSummaryImportFilter = {
 ConsentSummary_date_col = 'RunDate'
 ConsentSummary_from_date = SummaryTableRunDate
 ConsentSummary_to_date = SummaryTableRunDate
-ConsentSummaryServer = 'SQL2012Prod03'
+ConsentSummaryServer = 'SQL2012Test01'#'SQL2012Prod03'
 ConsentSummaryDatabase =  'Hilltop'
 ConsentSummaryTable = 'ComplianceSummaryConsent' #change after run is finished
 
@@ -1306,7 +1286,7 @@ WAPSummaryImportFilter = {
 WAPSummary_date_col = 'RunDate'
 WAPSummary_from_date = SummaryTableRunDate
 WAPSummary_to_date = SummaryTableRunDate
-WAPSummaryServer = 'SQL2012Prod03'
+WAPSummaryServer = 'SQL2012Test01'#'SQL2012Prod03'
 WAPSummaryDatabase =  'Hilltop'
 WAPSummaryTable = 'ComplianceSummaryWAP' #change after run is finished
 
@@ -1380,7 +1360,7 @@ Baseline = pd.merge(Baseline, WAPSummary,
         how = 'left')
 
 # Export Baseline
-Baseline.to_csv('Baseline' + RunDate + '.csv')
+#Baseline.to_csv('Baseline' + RunDate + '.csv')
 
 # Print overview of table
 print('\nBaseline Table ',

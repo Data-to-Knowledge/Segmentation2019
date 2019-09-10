@@ -148,11 +148,11 @@ LowRiskMultiMeter = ''
 conditions = [
 	(Segmentation['T_MetersRecieved'] > 1)
 			 ]
-choices = [HighRiskSharedMeter]
+choices = [HighRiskMultiMeter]
 Segmentation['MultipleMeterRisk'] = np.select(
                                             conditions, 
                                             choices, 
-                                            default = LowRiskSharedMeter)
+                                            default = LowRiskMultiMeter)
 
                             
 ### Shared WAP Warning
@@ -176,11 +176,11 @@ LowRiskSharedUnder5ls = ''
 conditions = [
 	(Segmentation['WAPRate'] < 5),
 			 ]
-choices = [HighRiskSharedMeter]
+choices = [HighRiskUnder5ls]
 Segmentation['Under5lsRisk'] = np.select(
                                         conditions, 
                                         choices, 
-                                        default = LowRiskSharedMeter)
+                                        default = LowRiskSharedUnder5ls)
 
 
 ##############################################################################
@@ -556,7 +556,7 @@ Segmentation['ConsentNote']  = Segmentation[[
 
 
 ### Create WAP level notes                             
-Segmentation['SharedMeterNote'] = np.where(Segmentation['SharedMeterRisk'].notnull(), 
+Segmentation['SharedMeterNote'] = np.where(Segmentation['SharedMeterRisk'] == 'Warning', 
                             (Segmentation['WAP'] +
                             ' contains data from other WAPs. '), 
                             ' ')
@@ -574,7 +574,7 @@ Segmentation['SharedWAPNote'] = np.where(Segmentation['ConsentsOnWAP'] > 1,
                             ' consents active this season. '),
                             ' ')
 
-Segmentation['VerificationNote'] = np.where(Segmentation['VerificationOutOfDate'] != 'Yes',
+Segmentation['VerificationNote'] = np.where(Segmentation['VerificationOutOfDate'] != 'No',
                             ('One of the Verification records  for ' +
                             Segmentation['WAP'] +
                             'is either out of date or does not exist. ').astype(str),
