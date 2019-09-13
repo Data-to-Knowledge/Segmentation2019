@@ -22,7 +22,7 @@ from datetime import date
 
 ReportName= 'Water Segmentation Inspections'
 RunDate = str(date.today())
-InspectionFile = 'SegmentationInspectionExamples.csv'
+InspectionFile = 'FirstSegmentationInspections.csv'
 
 ##############################################################################
 #### Import Data
@@ -66,7 +66,7 @@ SegOutcomes['ConsentNo'] = SegOutcomes['ConsentNo'].str.strip().str.upper()
 
 SegMissing_Count = SegInsp.shape[0]-SegOutcomes.shape[0]
 SegOutcomes = pd.merge(SegInsp, SegOutcomes, 
-                        on='InspectionID',
+                        on= ['InspectionID','ConsentNo'],
                         how='outer')
 SegOutcomes['InspectionStatus'] = SegOutcomes['InspectionStatus'].fillna('Missing Inspection')
 
@@ -104,20 +104,12 @@ SegOutcomes = pd.merge(SegOutcomes, FortnightTotalInsp,
 ##############################################################################
 
 ### aggrigate to zone/grade level
-ZoneGrades = SegOutcomes.groupby(['ZoneTotal','Zone','InspectionStatus','Fortnight']
+ZoneGrades = SegOutcomes.groupby(['Zone','InspectionStatus','Fortnight']
                         ).agg({
-                                  'ConsentNo' : 'count',
-                                  'FortnightTotal' : 'max'
+                                  'Fortnight' : 'count'
                                 })
 
-### Calculate percentages
-ZoneGrades['Fortnight'] = ZoneGrades.ConsentNo/ZoneGrades.FortnightTotal
-ZoneGrades['Fortnight'] = pd.Series(["{0:.0f}%".format(val * 100) for val in ZoneGrades['Fortnight']], index = ZoneGrades.index)
-
 #### Format output
-ZoneGrades = ZoneGrades.drop(['ConsentNo', 
-            'FortnightTotal'
-            ], axis=1)
 ZoneGrades = ZoneGrades.unstack()
 ZoneGrades.fillna(0, inplace= True)
 
@@ -129,18 +121,10 @@ ZoneGrades.fillna(0, inplace= True)
 ### Aggregate to grade level
 AllGrades = SegOutcomes.groupby(['InspectionStatus','Fortnight']
                         ).agg({
-                                  'ConsentNo' : 'count',
-                                  'Total' : 'max'
+                                  'Fortnight' : 'count'
                                 })
 
-### Calculate percentages
-AllGrades['Fortnight'] = AllGrades.ConsentNo/AllGrades.Total
-AllGrades['Fortnight'] = pd.Series(["{0:.0f}%".format(val * 100) for val in AllGrades['Fortnight']], index = AllGrades.index)
-
 ### Format output
-AllGrades = AllGrades.drop(['ConsentNo', 
-            'Total'
-            ], axis=1)
 AllGrades = AllGrades.unstack()
 AllGrades.fillna(0, inplace= True)
 
