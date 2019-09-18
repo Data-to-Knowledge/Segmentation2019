@@ -10,11 +10,9 @@ Created on Fri Sep  6 13:17:04 2019
 ### Import Packages
 ##############################################################################
 
-import numpy as np
 import pandas as pd
 import pdsql
 from datetime import date
-
 
 ##############################################################################
 ### Set Variables
@@ -22,15 +20,17 @@ from datetime import date
 
 ReportName= 'Water Segmentation Inspections'
 RunDate = str(date.today())
-InspectionFile = 'FirstSegmentationInspections.csv'
+InspectionFile = 'SegmentationInspections.csv'
+
 
 ##############################################################################
 #### Import Data
 ##############################################################################
 
 SegInsp = pd.read_csv(
-        r'D:\\Implementation Support\\Python Scripts\\scripts\\Import\\'+
+        r'V:\\WaterUseReporting\\InputFiles\\'+
         InspectionFile)
+
 SegInsp_List = SegInsp['InspectionID'].values.tolist()
 Insp_col = ['InspectionID',
             'InspectionStatus',
@@ -72,19 +72,32 @@ SegOutcomes['InspectionStatus'] = SegOutcomes['InspectionStatus'].fillna('Missin
 
 
 ##############################################################################
+### Find Inspections with Missing Information
+##############################################################################
+
+SegOutcomes['Zone'] = SegOutcomes['Zone'].fillna('Missing Zone')
+SegOutcomes['GA_FNAME'] = SegOutcomes['GA_FNAME'].fillna('Missing Officer')
+SegOutcomes['GA_LNAME'] = SegOutcomes['GA_LNAME'].fillna('Missing Officer')
+SegOutcomes['GA_USERID'] = SegOutcomes['GA_USERID'].fillna('Missing Officer')
+
+
+##############################################################################
 ### Create Total counts
 ##############################################################################
 
 ### Calculate Counts per fortnight
-TotalInsp = SegOutcomes.groupby(['Fortnight'],as_index=False)['ConsentNo'].aggregate('count')
+TotalInsp = SegOutcomes.groupby(
+        ['Fortnight'],as_index=False)['ConsentNo'].aggregate('count')
 TotalInsp.rename(columns ={'ConsentNo' : 'Total'}, inplace=True)
 
 ### Calculate counts per zone
-ZoneTotalInsp = SegOutcomes.groupby(['Zone'],as_index=False)['ConsentNo'].aggregate('count')
+ZoneTotalInsp = SegOutcomes.groupby(
+        ['Zone'],as_index=False)['ConsentNo'].aggregate('count')
 ZoneTotalInsp.rename(columns ={'ConsentNo' : 'ZoneTotal'}, inplace=True)
 
 ### Calculate counts per zone/fortnight
-FortnightTotalInsp = SegOutcomes.groupby(['Zone','Fortnight'],as_index=False)['ConsentNo'].aggregate('count')
+FortnightTotalInsp = SegOutcomes.groupby(
+        ['Zone','Fortnight'],as_index=False)['ConsentNo'].aggregate('count')
 FortnightTotalInsp.rename(columns ={'ConsentNo' : 'FortnightTotal'}, inplace=True)
 
 ### Add Total counts to list
@@ -109,7 +122,7 @@ ZoneGrades = SegOutcomes.groupby(['Zone','InspectionStatus','Fortnight']
                                   'Fortnight' : 'count'
                                 })
 
-#### Format output
+### Format output
 ZoneGrades = ZoneGrades.unstack()
 ZoneGrades.fillna(0, inplace= True)
 
@@ -132,16 +145,14 @@ AllGrades.fillna(0, inplace= True)
 ##############################################################################
 ### Export Results
 ##############################################################################
+
 ZoneGrades.to_csv(
-        r'D:\\Implementation Support\\Python Scripts\\scripts\\Export\\'
+        r'\\punakorero@SSL\\DavWWWRoot\\groups\\regimp\\Projects\\WaterUseReporting\\SegmentationReports\\'+
         'ZoneGrades' + RunDate + '.csv')
+
 AllGrades.to_csv(
-        r'D:\\Implementation Support\\Python Scripts\\scripts\\Export\\'
+        r'\\punakorero@SSL\\DavWWWRoot\\groups\\regimp\\Projects\\WaterUseReporting\\SegmentationReports\\'+
         'AllGrades' + RunDate + '.csv')
-
-
-
-
 
 
 
