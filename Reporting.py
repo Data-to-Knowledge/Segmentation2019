@@ -10,6 +10,7 @@ Created on Fri Sep  6 13:17:04 2019
 ### Import Packages
 ##############################################################################
 
+import os
 import pandas as pd
 import pdsql
 from datetime import date
@@ -21,15 +22,15 @@ from datetime import date
 ReportName= 'Water Segmentation Inspections'
 RunDate = str(date.today())
 InspectionFile = 'SegmentationInspections.csv'
+input_path = r'V:\\WaterUseReporting\\InputFiles\\'
+output_path = r'\\punakorero@SSL\DavWWWRoot\groups\regimp\Projects\WaterUseReporting\SegmentationReports'
 
 
 ##############################################################################
 #### Import Data
 ##############################################################################
 
-SegInsp = pd.read_csv(
-        r'V:\\WaterUseReporting\\InputFiles\\'+
-        InspectionFile)
+SegInsp = pd.read_csv(os.path.join(input_path, InspectionFile))
 
 SegInsp_List = SegInsp['InspectionID'].values.tolist()
 Insp_col = ['InspectionID',
@@ -146,13 +147,9 @@ AllGrades.fillna(0, inplace= True)
 ### Export Results
 ##############################################################################
 
-ZoneGrades.to_csv(
-        r'\\punakorero@SSL\\DavWWWRoot\\groups\\regimp\\Projects\\WaterUseReporting\\SegmentationReports\\'+
-        'ZoneGrades' + RunDate + '.csv')
+ZoneGrades.to_csv(os.path.join(output_path, 'ZoneGrades_', RunDate, '.csv'))
 
-AllGrades.to_csv(
-        r'\\punakorero@SSL\\DavWWWRoot\\groups\\regimp\\Projects\\WaterUseReporting\\SegmentationReports\\'+
-        'AllGrades' + RunDate + '.csv')
+AllGrades.to_csv(os.path.join(output_path, 'AllGrades_', RunDate, '.csv'))
 
 
 
