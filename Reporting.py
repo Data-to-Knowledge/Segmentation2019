@@ -22,9 +22,8 @@ from datetime import date
 ReportName= 'Water Segmentation Inspections'
 RunDate = str(date.today())
 InspectionFile = 'SegmentationInspections.csv'
-input_path = r'\\punakorero@SSL\DavWWWRoot\groups\regimp\Projects\WaterUseReporting\InputFiles'
-output_path = r'\\punakorero@SSL\DavWWWRoot\groups\regimp\Projects\WaterUseReporting\SegmentationReports'
-
+input_path = r'\\fs02\ManagedShares\Data\Implementation Support\WaterUseReporting\InputFiles'
+output_path = r'\\fs02\ManagedShares\Data\Implementation Support\WaterUseReporting\SegmentationReports'
 
 ##############################################################################
 #### Import Data
