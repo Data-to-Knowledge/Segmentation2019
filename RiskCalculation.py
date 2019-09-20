@@ -10,9 +10,7 @@ Created on Mon 19 August 2019
 
 import numpy as np
 import pandas as pd
-import pdsql
 from datetime import datetime, timedelta, date
-import random
 
 
 ##############################################################################
@@ -24,25 +22,14 @@ ReportName= 'Water Inspection Prioritzation Model - Risk Calculation'
 RunDate = str(date.today())
 
 ### Baseline File
-BaselineFile = 'Baseline2019-09-05.csv'
-
-### Allocation totals per fortnight
-FirstRunCountF1 = 625
-FirstRunCountF2 = 616
-SecondRunCountF3 = 632
-SecondRunCountF4 = 632
-SecondRunCountF5 = 616
-
-
-FortnightDate1 = '2019-09-09'
-FortnightDate2 = '2019-09-23'
+BaselineFile = 'Baseline2019-09-18.csv'
 
 
 ##############################################################################
 ### Import data
 ##############################################################################
 
-#Iplaod baseline
+#Uplaod baseline
 Segmentation = pd.read_csv(
         r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\" +
         BaselineFile)
@@ -101,7 +88,7 @@ conditions = [
 	(Segmentation['ComplexAllocations'] == 'No' ),
     (Segmentation['ComplexAllocations'].isnull() )
 			 ]
-choices = [LowRiskConditions,np.nan]
+choices = [LowRiskConditions,'']
 Segmentation['ConditionRisk'] = np.select(
                                             conditions, 
                                             choices, 
@@ -126,6 +113,19 @@ Segmentation['WaiverRisk'] = np.select(
                                         choices, 
                                         default = LowRiskWaiver)
 
+
+### Inactive Well Warning
+HighRiskInactiveWell = 'Warning'
+LowRiskInactiveWell = ''
+
+conditions = [
+	(Segmentation['WellStatus'] == 'Inactive' ),
+			 ]
+choices = [HighRiskInactiveWell]
+Segmentation['InactiveWellRisk'] = np.select(
+                                        conditions, 
+                                        choices, 
+                                        default = LowRiskInactiveWell)
 
 ### Shared Meter Warning
 HighRiskSharedMeter = 'Warning'
@@ -181,6 +181,7 @@ Segmentation['Under5lsRisk'] = np.select(
                                         conditions, 
                                         choices, 
                                         default = LowRiskSharedUnder5ls)
+
 
 
 ##############################################################################
@@ -287,23 +288,6 @@ conditions = [
              ]
 choices = [HighRiskTMR, LowRiskTMR, MedRiskTMR]
 Segmentation['T_MRNC'] = np.select(conditions, choices, default = np.nan)
-
-
-### Missing Data Records Priority
-HighThresholdMR = 10
-LowThresholdMR = 0
-HighRiskMR = 3
-MedRiskMR = 1
-LowRiskMR = 0
-
-conditions = [
-        (Segmentation['WS_TotalMissingRecord'] > HighThresholdMR),
-        (Segmentation['WS_TotalMissingRecord'] == LowThresholdMR),
-        ((Segmentation['WS_TotalMissingRecord'] > LowThresholdMR) & 
-        (Segmentation['WS_TotalMissingRecord'] <= HighThresholdMR))
-             ]
-choices = [HighRiskMR, LowRiskMR, MedRiskMR]
-Segmentation['WS_MRNC'] = np.select(conditions, choices, default = np.nan)
 
 
 ##############################################################################
@@ -420,14 +404,17 @@ Segmentation['WS_DayNDVNC'] = np.select(conditions, choices, default = np.nan)
 ##############################################################################
 
 ### Assign Inspection Run Catagories
-# 1 - first fornight push
-# 2 - not first fornight push
+# 1 - first  push
+# 2 - second push
+# 3 - third push
 conditions = [
         ((Segmentation['ConditionRisk'] == 'Warning') |
                 (Segmentation['WUGRisk'] == 'Warning') |
-                (Segmentation['SharedMeterRisk'] == 'Warning')) 
+                (Segmentation['SharedMeterRisk'] == 'Warning')),
+        ((Segmentation['SharedWAPRisk'] == 'Warning') |
+        (Segmentation['WUGRisk'] == 'Warning'))
              ]
-choices = [2]
+choices = [2,3]
 Segmentation['InspectionAssignment'] = np.select(
                                                 conditions, 
                                                 choices, 
@@ -441,11 +428,12 @@ Segmentation['InspectionAssignment'] = np.select(
 # 2 - must inspect
 conditions = [
         ((Segmentation['CampaignRisk'] == 'Warning') |
-               (Segmentation['WUGRisk'] == 'Warning')|
-               (Segmentation['Under5lsRisk'] == 'Warning')|
-               (Segmentation['WaiverRisk'] == 'Warning')|
+               (Segmentation['Under5lsRisk'] == 'Warning') |
+               (Segmentation['InactiveWellRisk'] == 'Warning') |
+               (Segmentation['WaiverRisk'] == 'Warning') |
                (Segmentation['MidSeasonRisk'] == 'Warning')),
-         ((Segmentation['AMRisk'] == 'Warning')
+         ((Segmentation['AMRisk'] == 'Warning') |
+          (Segmentation['WUGRisk'] == 'Warning')      
              )
              ]
 choices = [0,2]
@@ -453,7 +441,6 @@ Segmentation['InspectionNecessity'] = np.select(
                                                 conditions, 
                                                 choices, 
                                                 default = 1)
-
 
 
 ##############################################################################
@@ -465,8 +452,7 @@ Segmentation['ComplexityLevel'] = (Segmentation[[
                                                 'ConditionRisk',
                                                 'SharedMeterRisk',
                                                 'MultipleMeterRisk',
-                                                'SharedWAPRisk',
-                                                'AMRisk'
+                                                'SharedWAPRisk'
                                                 ]]== 'Warning').sum(axis=1)
 
 
@@ -480,13 +466,60 @@ Segmentation['TotalRisk'] = Segmentation[[
                                         'CS_AVNC',
                                         'CS_MedRateNC',
                                         'CS_TimeRoTNC', 
-#                                       'CS_DayNDVNC',
-#                                       'WS_MRNC',                                          
-#                                       'WS_MedRateNC',
-#                                       'WS_TimeRoTNC'
-#                                       'WS_DayNDVNC',
+                                        'CS_DayNDVNC', #not used in first push                                          
+                                        'WS_MedRateNC', #not used in first push
+                                        'WS_TimeRoTNC', #not used in first push
+                                        'WS_DayNDVNC', #not used in first push
                                         ]].sum(axis=1)
 
+
+##############################################################################
+### Save Output
+##############################################################################
+
+### Format Segmentation
+
+SegmentationOut = Segmentation[[
+                                'ConsentNo',
+                                'WAP',
+                                'CWMSZone',
+                                'HolderAddressFullName',
+                                'InspectionID',
+                                'CampaignRisk',
+                                'MidSeasonRisk',                               
+                                'WUGRisk',                                
+                                'AMRisk',                                
+                                'ConditionRisk',                                
+                                'WaiverRisk',                                
+                                'InactiveWellRisk',                                
+                                'SharedMeterRisk',
+                                'MultipleMeterRisk',
+                                'SharedWAPRisk',
+                                'Under5lsRisk',
+                                'LatestInspectionRisk',
+                                'LatestNonComplianceRisk',
+                                'CountNonComplianceRisk',
+                                'VerificationRisk',
+                                'T_MRNC',
+                                'CS_AVNC',
+                                'CS_MedRateNC',
+                                'WS_MedRateNC',
+                                'CS_TimeRoTNC',
+                                'WS_TimeRoTNC',
+                                'CS_DayNDVNC',
+                                'WS_DayNDVNC',              
+                                'WAPsOnConsent',               
+                                'ConsentsOnWAP',                                
+                                'InspectionAssignment',
+                                'InspectionNecessity',
+                                'ComplexityLevel',
+                                'TotalRisk'
+                                ]]
+
+### Export Segmentation
+SegmentationOut.to_csv(
+        r'D:\\Implementation Support\\Python Scripts\\scripts\\Import\\'+
+        'Segmentation' + RunDate + '.csv')
 
 ##############################################################################
 ### Create Table of Inspections
@@ -499,19 +532,28 @@ InspectionList = InspectionList.groupby(
         ).agg({
                 'HolderAddressFullName': 'max',
                 'CWMSZone' :'max',
+                'AdMan' :'max',
+                'WUGNo' : 'max', 
+                'MidSeasonRisk' : 'max', 
+                'CampaignRisk' : 'max',
                 'TotalRisk': 'max',
-                'ConsentsOnWAP' : 'max',
-                'WAPsOnConsent' : 'max',
                 'InspectionAssignment' : 'max',
                 'InspectionNecessity' : 'min',
-                'AdMan' :'max',
+                'WAPsOnConsent' : 'max',               
+                'ConsentsOnWAP' : 'max',
                 'ComplexityLevel' : 'max'
                 })
 
-##############################################################################
-### Create Inspection Comment
-##############################################################################
 
+### Export Inspection List
+InspectionList.to_csv(
+        r'D:\\Implementation Support\\Python Scripts\\scripts\\Import\\'+
+        'InspectionList' + RunDate + '.csv')
+
+
+##############################################################################
+### Create Inspection Note
+##############################################################################
 
 ### Create Base Notes 
 Segmentation['IntroNote'] = ('This consent has been assessed through the 2018/19 inspection allocation model. ')
@@ -594,6 +636,8 @@ Segmentation['WAPNote']  = Segmentation[[
                                             'PoorDataNote'
                                             ]].astype(str).apply(lambda x: ''.join(x), axis=1)                                
 
+
+### combine WAP and consent notes
 SegmentationNote = Segmentation[['ConsentNo','WAP','ConsentNote','WAPNote','ClosingNote']]
 
 SegmentationNote = SegmentationNote.groupby(
@@ -606,559 +650,32 @@ SegmentationNote['InspectionNote'] = (SegmentationNote['ConsentNote'] +
                                      '  --  ' +
                                      SegmentationNote['ClosingNote'])
 
+
+### Join note back to segmentation file
 SegmentationNote = SegmentationNote[['ConsentNo','InspectionNote']]
 
-
-##############################################################################
-### Select First Run of Inspections
-##############################################################################
-
-### Remove Midseason Inspections
-MidSeasonCount = Segmentation[Segmentation['InspectionID'].notnull()]
-
-### Remove Number of Midseason Inspections from total
-MidSeasonCount = len(MidSeasonCount[['ConsentNo']].drop_duplicates())
-Fortnight1 = FirstRunCountF1-MidSeasonCount
-Fortnight2 = FirstRunCountF2
-
-### Remove all 2nd Run Inspections
-FirstInspections = InspectionList[(InspectionList['InspectionAssignment'] == 1 )]
-
-### Choose Inspections for Fornight 1
-F1Inspections = FirstInspections.sample(n=Fortnight1, weights = 'TotalRisk', random_state = 1)
-F1Inspections['Fortnight'] = 1
-
-F1InspectionsList = F1Inspections[['ConsentNo','Fortnight']]
-
-FirstInspections = pd.merge(FirstInspections, F1InspectionsList, on = 'ConsentNo', how = 'left')
-FirstInspections = FirstInspections[(FirstInspections['Fortnight'] != 1)]
-FirstInspections = FirstInspections.drop(['Fortnight'], axis=1)
-
-### Choose Inspections for Fornight 1
-F2Inspections = FirstInspections.sample(n=Fortnight2, weights = 'TotalRisk', random_state = 1)
-F2Inspections['Fortnight'] = 2
-F2InspectionsList = F2Inspections[['ConsentNo','Fortnight']]
-
-
-
-
-InspectionAllocations = pd.concat([
-                                F1InspectionsList,
-                                F2InspectionsList
-                                ])
-
-InspectionAllocations = pd.merge(InspectionAllocations, InspectionList, on = 'ConsentNo', how = 'left')
-
-
-Officers = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\Officers.csv")
-
-
-
-InspectionAllocations.loc[InspectionAllocations['Fortnight'] == 1, 'RMO'] = random.choices(Officers['RMO'],Officers['F1Weight'], k= Fortnight1)
-InspectionAllocations.loc[InspectionAllocations['Fortnight'] == 2, 'RMO'] = random.choices(Officers['RMO'],Officers['F2Weight'], k= FirstRunCountF2)
-
-FirstPush = InspectionAllocations[InspectionAllocations['Fortnight'].notnull()]
-
-FirstPush.to_csv('FirstPush.csv')
-
-MidseasonInspections = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\MidseasonInspections.csv")
-
-MidseasonInspectionList = Segmentation[Segmentation['MidSeasonRisk'] == 'Warning']
-
-MidseasonInspectionList = MidseasonInspectionList.groupby(
-        ['ConsentNo'], as_index=False
-        ).agg({
-                'HolderAddressFullName': 'max',
-                'CWMSZone' :'max',
-                'TotalRisk': 'max',
-                'InspectionAssignment' : 'max',
-                'InspectionNecessity' : 'min',
-                'AdMan' : 'max',
-                'ComplexityLevel' : 'max'
-                })
-
-MidseasonInspectionList['RMO'] = random.choices(Officers['RMO'],Officers['F1Weight'], k=len(MidseasonInspectionList))
-
-MidseasonInspectionList = pd.merge(MidseasonInspectionList, MidseasonInspections, on = 'ConsentNo', how = 'left')
-
-MidseasonInspectionList.to_csv('MidseasonInspectionList.csv')
-
-##############################################################################
-### First Allocation
-##############################################################################
-
-
-InspectionAllocations = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\FirstPush-Edit.csv")
-
-Officers = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\Officers.csv")
-
-OfficerLink = Officers[['RMO','AccelaUserID']]
-
-
-InspectionAllocations = pd.merge(InspectionAllocations, OfficerLink, on = 'RMO', how = 'left')
-
-InspectionAllocations = pd.merge(InspectionAllocations, SegmentationNote, on = 'ConsentNo', how = 'left')
-
-InspectionAllocations = pd.merge(InspectionAllocations, InspectionList, on = 'ConsentNo', how = 'left')
-
-conditions = [
-	(InspectionAllocations['Fortnight'] == 1),
-	(InspectionAllocations['Fortnight'] == 2)
-			 ]
-choices = [FortnightDate1, FortnightDate2]
-InspectionAllocations['FortnightDate'] = np.select(conditions, choices, default = np.nan)
-
-InspectionAllocations['Consent'] = InspectionAllocations['ConsentNo']
-InspectionAllocations['InspectionType'] = 'Desk Top Inspection'
-InspectionAllocations['InspectionSubType'] = 'Water Use Data'
-InspectionAllocations['ScheduledDate']  = InspectionAllocations['FortnightDate']
-InspectionAllocations['InspectionDate']  = ' '
-InspectionAllocations['InspectionStatus'] = 'Scheduled'
-InspectionAllocations['AssignedTo'] = InspectionAllocations['AccelaUserID']
-InspectionAllocations['Department'] = ' '
-InspectionAllocations['GeneralComments'] = InspectionAllocations['InspectionNote']
-
-ScheduleInspections = InspectionAllocations[[
-                                              'Consent',
-                                              'InspectionType',
-                                              'InspectionSubType',
-                                              'ScheduledDate',
-                                              'InspectionDate',
-                                              'InspectionStatus',
-                                              'AssignedTo',
-                                              'Department',
-                                              'GeneralComments',
-                                              'ConsentsOnWAP' 
-                                             ]]
-ScheduleInspections.to_csv('WaterSegmentationInspections' + RunDate +'.csv')
-
-##############################################################################
-### Second Push
-#############################################################################
-MidseasonInspectionsList = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\MidseasonInspectionList.csv")
-
-FirstPush = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\FirstPush.csv")
-
-FirstPushList = FirstPush[['ConsentNo','Fortnight']]
-
-
-
-SecondInspections = InspectionList
-
-SecondInspections = pd.merge(SecondInspections, FirstPushList, on = 'ConsentNo', how = 'left')
-SecondInspections = SecondInspections[SecondInspections['Fortnight'].isnull()]
-
-SecondInspections = SecondInspections.drop(['Fortnight'], axis=1)
-
-NecessaryInspections = SecondInspections[(SecondInspections['InspectionNecessity'] == 2)]
-SampledInspections = SecondInspections[(SecondInspections['InspectionNecessity'] != 2)]
-
-
-
-NecessaryInspections['Fortnight'] = np.random.randint(low=3, high=6, size=len(NecessaryInspections))
-
-NecessaryInspectionsCount =  NecessaryInspections.groupby(
-                                            ['Fortnight'], as_index = False
-                                            ).agg({'ConsentNo' : 'count'})
-
-
-NecessaryInspectionsList = NecessaryInspections[['ConsentNo','Fortnight']]
-
-NecessaryGroup3 = NecessaryInspectionsCount[NecessaryInspectionsCount['Fortnight'] == 3].iloc[0,1]
-NecessaryGroup4 = NecessaryInspectionsCount[NecessaryInspectionsCount['Fortnight'] == 4].iloc[0,1]
-NecessaryGroup5 = NecessaryInspectionsCount[NecessaryInspectionsCount['Fortnight'] == 5].iloc[0,1]
-
-WUGInspections = Segmentation.groupby(
-        ['WUGNo'], as_index=False
-        ).agg({
-                'WUGName': 'max',
-                'CWMSZone' :'max',
-                'TotalRisk': 'max',               
-                'InspectionAssignment' : 'max',
-                'InspectionNecessity' : 'min',
-                'ConsentsOnWAP' : 'max',
-                'ComplexityLevel' : 'max'
-                })
- 
-WUGInspections['Fortnight'] = np.random.randint(low=3, high=6, size=len(WUGList))
-
-
-
-WUGInspectionList = WUGInspections[['WUGNo','Fortnight']]
-
-WUGInspectionCount =  WUGInspections.groupby(
-                                        ['Fortnight'], as_index = False
-                                        ).agg({'WUGNo' : 'count'})
-
-WUGGroup3 = WUGInspectionCount[WUGInspectionCount['Fortnight'] == 3].iloc[0,1]
-WUGGroup4 = WUGInspectionCount[WUGInspectionCount['Fortnight'] == 4].iloc[0,1]
-WUGGroup5 = WUGInspectionCount[WUGInspectionCount['Fortnight'] == 5].iloc[0,1]
-
-
-Fortnight3 = SecondRunCountF3-NecessaryGroup3 - WUGGroup3
-Fortnight4 = SecondRunCountF4-NecessaryGroup4 - WUGGroup4
-Fortnight5 = SecondRunCountF5-NecessaryGroup5 - WUGGroup5
-
-
-
-F3Inspections = SampledInspections.sample(n=Fortnight3, weights = 'TotalRisk', random_state = 1)
-F3Inspections['Fortnight'] = 3
-F3InspectionsList = F3Inspections[['ConsentNo','Fortnight']]
-
-SampledInspections = pd.merge(SampledInspections, F3InspectionsList, on = 'ConsentNo', how = 'left')
-SampledInspections = SampledInspections[(SampledInspections['Fortnight'] != 3)]
-SampledInspections = SampledInspections.drop(['Fortnight'], axis=1)
-
-
-F4Inspections = SampledInspections.sample(n=Fortnight4, weights = 'TotalRisk', random_state = 1)
-F4Inspections['Fortnight'] = 4
-F4InspectionsList = F4Inspections[['ConsentNo','Fortnight']]
-
-SampledInspections = pd.merge(SampledInspections, F4InspectionsList, on = 'ConsentNo', how = 'left')
-SampledInspections = SampledInspections[(SampledInspections['Fortnight'] != 4)]
-SampledInspections = SampledInspections.drop(['Fortnight'], axis=1)
-
-
-F5Inspections = SampledInspections.sample(n=Fortnight5, weights = 'TotalRisk', random_state = 1)
-F5Inspections['Fortnight'] = 5
-F5InspectionsList = F4Inspections[['ConsentNo','Fortnight']]
-
-SampledInspections = pd.merge(SampledInspections, F5InspectionsList, on = 'ConsentNo', how = 'left')
-SampledInspections = SampledInspections[(SampledInspections['Fortnight'] != 5)]
-
-
-SampledInspections['Fortnight'] = 0
-
-NoInspectionsList = SampledInspections[['ConsentNo','Fortnight']]
-
-
-
-
-
-InspectionAllocations = pd.concat([
-                                NecessaryInspectionsList,
-                                F1InspectionsList,
-                                F2InspectionsList, 
-                                F3InspectionsList,
-                                F4InspectionsList,
-                                F5InspectionsList,
-                                NoInspectionsList
-#                                WUGInspectionList
-                                ])
-
-
-
-InspectionAllocations = pd.merge(InspectionAllocations, InspectionList, on = 'ConsentNo', how = 'left')
-
-
-Officers = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\Officers.csv")
-
-
-InspectionAllocations.loc[InspectionAllocations['Fortnight'] == 3, 'RMO'] = random.choices(Officers['RMO'],Officers['F1Weight'], k= (SecondRunCount-WUGGroup3))
-InspectionAllocations.loc[InspectionAllocations['Fortnight'] == 2, 'RMO'] = random.choices(Officers['RMO'],Officers['F2Weight'], k= FirstRunCount)
-
-FirstPush = InspectionAllocations[InspectionAllocations['Fortnight'].notnull()]
-
-FirstPush.to_csv('FirstPush.csv')
-
-
-Fortnight3 = SecondRunCount-NecessaryGroup3 - WUGGroup3
-Fortnight4 = SecondRunCount-NecessaryGroup4 - WUGGroup4
-Fortnight5 = SecondRunCount-NecessaryGroup5 - WUGGroup5
-
-
-tempList = InspectionAllocations
-
-tempList['RMO'] = random.choices(Officers['RMO'],Officers['F1Weight'], k=len(tempList))
-
-import random
-tempList.loc[tempList['Fortnight'] == 1, 'RMO'] = random.choices(Officers['RMO'],Officers['F1Weight'], k= Fortnight1)
-tempList.loc[tempList['Fortnight'] == 2, 'RMO'] = random.choices(Officers['RMO'],Officers['F2Weight'], k= FirstRunCount)
-
-FortnightTotals = tempList.groupby(['Fortnight'], as_index = False
-                 ).agg({'ConsentNo': 'count'})
-
-
-Officers
-Key, Officer, Team, Weight
-
-
-
-Officers = pd.DataFrame([
-        ['Mr. AAA','Mr. BB','Mr. X'], 
-        [1,1,0.5]]).T
-
-Officers.columns = ['RMO','Weights']
-tempList = F4InspectionsList
-tempList['RMO'] = random.choices(Officers['RMO'],Officers['Weights'], k=len(tempList))
-     
-
-
-
-
-Officers.sum(axis = 0, skipna = True)
-
-
-tempList = F4InspectionsList
-
-
-tempList.groupby(['RMO'], as_index = False
-                 ).agg({'ConsentNo': 'count'})
-
-
-RMO =  ['Mr. Smith','Mr. Jones','Mr. X']
-Weights =   [0.5,0.2,0.3]   
-        
-
-random.choices(RMO,Weights, k=30)
-#
-Officers[1]
-
-#SecondRun = SecondInspections.sample(n=FirstRunCount, weights = 'TotalRisk', random_state = 1)
-
-
-#df.sample(n=2, weights='num_specimen_seen', random_state=1)
-
-
-import random
-random.choices(['one', 'two', 'three'], [0.2, 0.3, 0.5], k=10)
-
-
-
-
-
-
-FirstInspections
-Accela user ID
-Note
-Other columns
-
-extra single inspections
-
-#example = pd.DataFrame([
-#        ['Mr. Smith', 'Mr. Smith','Mr. Jones','Mr. Jones','Mr. Jones'], 
-#        ['CRC1','CRC1','CRC2','CRC3','CRC3'], 
-#        ['NCx','NCy','NCx','NCy','NCz']
-#        ]).T
-#
-#output = pd.DataFrame([
-#        ['Mr. Smith', 'Dear Mr. Smith, there is NCx and NCy on CRC1'], 
-#        ['Mr.Jones', 'Dear Mr. Jones, there is NCx on CRC2 and NCy and NCz on CRC3']
-#        ])
-#
-#ex2 = example.groupby([0, 1])[2].apply(lambda x: ', and '.join(x))
-#ex2 = example.groupby([0, 1])[2].apply(lambda x: ', and '.join(x)).reset_index()
-#ex2['crc_nc'] = ex2[1] + ' has ' + ex2[2]
-#ex2.groupby(0).crc_nc.apply(lambda x: ', and '.join(x))
-#
-#
-#'CRC1 has NCx and NCy'
-#'CRC2 has NCx. CRC3 has NCy and NCz'
-
-
-
-#temp['WAPsToInspect'] = temp['WAPsOnConsent'] - temp['Waiver']
-#
-#
-#conditions = [
-#    (pd.isnull(ConsentSummary['CS_TimeAboveRate'])) | 
-#        (ConsentSummary['CS_TimeAboveRate'] <= LowThresholdTimeRoT),
-#    (ConsentSummary['CS_TimeAboveRate'] > HighThresholdTimeRoT)
-#             ]
-#choices = [LowRiskTimeRoT,HighRiskTimeRoT]
-#ConsentSummary['CS_TimeRoTNC'] = np.select(conditions, choices, default = MedRiskTimeRoT)
-#
-#conditions = [
-#    (pd.isnull(WAPSummary['WS_TimeAboveRate'])) | 
-#        (WAPSummary['WS_TimeAboveRate'] <= LowThresholdTimeRoT),
-#    (WAPSummary['WS_TimeAboveRate'] > HighThresholdTimeRoT)
-#             ]
-#choices = [LowRiskTimeRoT,HighRiskTimeRoT]
-#WAPSummary['WS_TimeRoTNC'] = np.select(conditions, choices, default = MedRiskTimeRoT)
-#
-
-
-
-
-
-#Inspection_agg = Inspection.groupgy(
-#	['ConsentNo'], as_index = False
-#	).agg(
-#			{
-#			'IDRisk' : 'max',
-#			'IGRisk' : 'max',
-#			'InspectionID': 'count'	
-#			}
-#		  )
-
-
-
-
-
-
-
-# Meter Risk
-
-# Count WAP
-# count Meter installed
-# count meter verified
-# percent meter installed
-# percent meter verified
-
-
-
-
-
-## Meter Waiver
-
-
-### No Telemetry
-#HighDateThresholdNT = datetime.strptime('2018-07-01', '%Y-%m-%d')
-#LowDateThresholdNT = datetime.strptime('2018-01-01', '%Y-%m-%d') ###check
-#HighRiskNT = 2
-#MedRiskNT = 1
-#LowRiskNT = 0
-#
-#conditions = [
-#	(Meter.TelemetryEnd > LowDateThresholdNT),
-#	(Meter.TelemetryEnd < HighDateThresholdNT) | (Meter.TelemetryEnd isnull)		 
-#			 ]
-#choices = [LowRiskNT, HighRiskNT]
-#Meter['NTRisk'] = np.select(conditions, choices, default = MedRiskNT)
-
-
-
-
-
-# WAP risk
-
-
-
-
-
-
-#
-#
-## Summay Risk
-##RoTNC
-#HighPercentThresholdRoT = 115
-#LowPercentThresholdRoT = 105
-#HighRiskRoT = 2
-#MedRiskRoT = 1
-#LowRiskRoT = 0
-#
-#Segmentation['PercentOverRoT'] = ((
-#	Segmentation.MaxRateTaken/Segmentation.MaxTakeRate)*100)
-#
-#conditions = [
-#    (Segmentation.MaxTakeRate == np.nan) | (Segmentation.MaxRateTaken == np.nan) | (Segmentation.PercentOverRoT<= LowPercentThresholdRoT),
-#    ((Segmentation.MaxRateTaken/Segmentation.MaxTakeRate)*100 > HighPercentThresholdRoT)
-#             ]
-#choices = [LowRiskRoT,HighRiskRoT]
-#Segmentation['RoTRisk'] = np.select(conditions, choices, default = MedRiskRoT)
-#
-#
-## CDNC
-#HighPercentThresholdCDV = 110
-#LowPercentThresholdCDV = 105
-#HighRiskCDV = 2
-#MedRiskCDV = 1
-#LowRiskCDV = 0
-#
-#Segmentation['PercentOverCDV'] = ((
-#	Segmentation.MaxVolumeAboveNDayVolume+
-#	Segmentation.MaxConsecutiveDayVolume)/
-#	Segmentation.MaxConsecutiveDayVolume*100
-#	)
-#
-#conditions = [
-#    (Segmentation.MaxVolumeAboveNDayVolume == np.nan) | (Segmentation.PercentOverCDV <= LowPercentThresholdCDV),
-#    ((Segmentation.NumberOfConsecutiveDays == 1) & (Segmentation.PercentOverCDV > HighPercentThresholdCDV)) | ((Segmentation.NumberOfConsecutiveDays > 1) & (Segmentation.PercentOverCDV > 120))
-#             ]
-#choices = [LowRiskCDV,HighRiskCDV]
-#Segmentation['CDNC'] = np.select(conditions, choices, default = MedRiskCDV)
-#
-#
-##AVNC
-#NoiseThresholdAV = 200
-#HighVolumeThresholdAV = 110
-#LowVolumeThresholdAV = 100
-#HighRiskAV = 2
-#MedRiskAV = 1
-#LowRiskAV = 0
-#OtherRiskAV = 9
-#
-#conditions = [
-#    (Summary.PercentAnnualVolumeTaken == np.nan) | (Summary.PercentAnnualVolumeTaken <= LowVolumeThresholdAV),
-#    (Summary.PercentAnnualVolumeTaken > NoiseThresholdAV),
-#    (Summary.PercentAnnualVolumeTaken > LowVolumeThresholdAV) & (Summary.PercentAnnualVolumeTaken <= HighVolumeThresholdAV),
-#    (Summary.PercentAnnualVolumeTaken > HighVolumeThresholdAV) & (Summary.PercentAnnualVolumeTaken <= NoiseThresholdAV)
-#             ]
-#choices = [LowRiskAV, LowRiskAV, MedRiskAV, HighRiskAV]
-#Summary['AVRisk'] = np.select(conditions, choices, default = OtherRiskAV)
-#
-#
-##LFNC
-#HighVolumeThresholdLF = 115
-#LowVolumeThresholdLF = 105
-#HighRiskLFV = 2
-#MedRiskLFV = 1
-#LowRiskLFV = 0
-#
-#conditions = [
-#    (Summary.TotalVolumeAboveRestriction == np.nan) | (Summary.TotalVolumeAboveRestriction == 0),
-#    (Summary.TotalVolumeAboveRestriction > HighVolumeThresholdLF) 
-#             ]
-#choices = [LowRiskLFV,HighRiskLFV]
-#Summary['LFVRisk'] = np.select(conditions, choices, default = MedRiskLFV)
-#
-#
-#HighDaysThresholdLF = 2
-#LowDaysThresholdLF = 0
-#HighRiskLFD = 2
-#MedRiskLFD = 1
-#LowRiskLFD = 0
-#
-#conditions = [
-#    (Summary.TotalDaysAboveRestriction == np.nan) | Summary.TotalDaysAboveRestriction == 0),
-#    (Summary.TotalDaysAboveRestriction > HighDaysThresholdLF)
-#             ]
-#choices = [LowRiskLFD,HighRiskLFD]
-#Summary['LFDRisk'] = np.select(conditions, choices, default = MedRiskLFD)
-#
-#
-##MRNC
-#HighThresholdMR = 200
-#LowThresholdMR = 10
-#HighRiskMR = 10000
-#MedRiskMR = 5
-#LowRiskMR = 0
-#OtherRiskMR = 5000
-#
-#conditions = [
-#    (Summary.TotalMissingRecord == np.nan) | (Summary.TotalMissingRecord == 0),
-#    (Summary.TotalMissingRecord > HighThresholdMR)
-#    (Summary.TotalMissingRecord > 0) & (Summary.TotalMissingRecord <= LowThresholdMR),
-#             ]
-#choices = [LowRiskMR, HighRiskMR, MedRiskAV]
-#Summary['MRNC'] = np.select(conditions, choices, default = OtherRiskAV)
-#
-#
-#
-#
-#
-#
-#
-#
-#WAP = pd.merge(WAP, Meter_agg, on = 'WAP', how = 'left')
-#
-#CalculatedRisk = pd.merge(Consent, WAP_agg, on = 'ConsentNo', how = 'left')
-#
-#CalculatedRisk = pd.merge(CalculatedRisk, Activity_agg, on = 'ConsentNo', how = 'left')
-#CalculatedRisk = pd.merge(CalculatedRisk, Inspection_agg, on 'ConsentNo', how = 'left')
-#CalculatedRisk = pd.merge(CalculatedRisk, )
-                                
-Segmentation['CampNote'] = np.nan
-Segmentation.loc[Segmentation['CampaignRisk'] == 'Warning', 'CampNote'] = 'fancy phrase'
-
-
+### Export Segmentation
+SegmentationNote.to_csv(
+        r'D:\\Implementation Support\\Python Scripts\\scripts\\Import\\'+
+        'SegmentationNote' + RunDate + '.csv')
+
+
+###############################################################################
+### End.
+###############################################################################
+
+"""
+© 2019 GitHub, Inc.
+Terms
+Privacy
+Security
+Status
+Help
+Contact GitHub
+Pricing
+API
+Training
+Blog
+About
+© 2019 GitHub, Inc.
+"""

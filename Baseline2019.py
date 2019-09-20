@@ -35,7 +35,7 @@ TelemetryFromDate = '2018-07-01'# previous model Jan-1
 TelemetryToDate = '2019-06-30' #non existant in previous model
 InspectionStartDate = '2016-07-01' #'2018-07-13'
 InspectionEndDate = '2019-07-01' #'2019-11-01'
-SummaryTableRunDate = '2019-09-06'#'2019-08-20'
+SummaryTableRunDate = '2019-09-20'
 VerificationLimit = '2014-07-01'
 WaiverLimit = '2018-07-01'
 
@@ -46,6 +46,7 @@ WaiverLimit = '2018-07-01'
 
 ##############################################################################
 ### Import Targeted Consents
+##############################################################################
 
 
 ### Import Base Consent Information
@@ -688,6 +689,7 @@ print('\nSharedConsent Table ',
 ##############################################################################
 ### Import Timeseries Info from Hydro
 
+
 # Import info on timeseries received
 TelemetryCol = [
         'WAP',
@@ -811,8 +813,10 @@ print('\nTelemetry Table ',
       Telemetry.shape,'\n',
       Telemetry.nunique(), '\n\n')
 
+
 ##############################################################################
 ### Import Well Info
+##############################################################################
 
 # Import base info on each WAP
 WellDetailsCol = [
@@ -847,12 +851,12 @@ conditions = [
         WellDetails['WellStatus'] == 'Active'
                ]
 choices = ['Active']
-WellDetails['WellStatus'] = np.select(conditions, choices, default = '')
+WellDetails['WellStatus'] = np.select(conditions, choices, default = 'Inactive')
 
 # Calculate shared meters
 WellDetails['SharedMeter'] = np.where(
         WellDetails['GWuseAlternateWell'] != WellDetails['WAP'],
-        'Yes', '')
+        'Yes', 'No')
 
 WellDetails = WellDetails.drop([
                                 'GWuseAlternateWell'], axis=1)
@@ -903,7 +907,7 @@ conditions = [
         Waiver['WaiverEditDate'] < WaiverLimit
                ]
 choices = ['Yes', 'OutofDate']
-Waiver['Waiver'] = np.select(conditions, choices, default = np.nan)
+Waiver['Waiver'] = np.select(conditions, choices, default = 'No')
 
 # Remove extra columns
 Waiver = Waiver.drop(['WM_Tmp_Waiver', 
@@ -1055,8 +1059,10 @@ print('\nDataLogger Table',
       DataLogger.shape,'\n',
       DataLogger.nunique(), '\n\n')
 
+
 ##############################################################################
 ### Import Inspection History Info
+##############################################################################
 
 # Import Inspections
 InspectionCol = [
@@ -1140,8 +1146,10 @@ print('\nNonCompliance Table ',
       NonCompliance.shape,'\n',
       NonCompliance.nunique(), '\n\n')
 
+
 ##############################################################################
 ### Import information from teams not stored in datawarehouse
+##############################################################################
 
 ### Import Campaign Participants
 # Import data from campaigns team
@@ -1166,6 +1174,7 @@ MidseasonInspections = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\
 
 ##############################################################################
 ### Import Summary Table
+##############################################################################
 
 ### Import Consent Summary Table
 ConsentSummaryCol = [
@@ -1179,8 +1188,8 @@ ConsentSummaryCol = [
         'MaxTakeRate', #not used previous years
 #        'HasFlowRestrictions', #unreliable. not used previous years
 #        'ComplexAllocation', #not used previous years
-#        'TotalVolumeAboveRestriction',
-#        'TotalDaysAboveRestriction',
+#        'TotalVolumeAboveRestriction', #unreliable
+#        'TotalDaysAboveRestriction',#unreliable
 #        'TotalVolumeAboveNDayVolume', #unreliable. not used previous years
         'TotalDaysAboveNDayVolume', # added for second run
 #        'MaxVolumeAboveNDayVolume', #unreliable. not used previous years
@@ -1197,7 +1206,7 @@ ConsentSummaryColNames = {
         'MaxTakeRate' : 'ConsentRate',
         'TotalDaysAboveNDayVolume' : 'CS_DaysAboveNday',
         'PercentAnnualVolumeTaken': 'CS_PercentAnnualVolume',
-        'TotalTimeAboveRate' : 'CS_TimeAboveRate', #not used previous years
+        'TotalTimeAboveRate' : 'CS_TimeAboveRate',
         'MaxRateTaken' : 'CS_MaxRate',
         'MedianRateTakenAboveMaxRate' : 'CS_MedianRateAbove'
         }
@@ -1208,7 +1217,7 @@ ConsentSummaryImportFilter = {
 ConsentSummary_date_col = 'RunDate'
 ConsentSummary_from_date = SummaryTableRunDate
 ConsentSummary_to_date = SummaryTableRunDate
-ConsentSummaryServer = 'SQL2012Test01'#'SQL2012Prod03'
+ConsentSummaryServer = 'SQL2012Prod03'
 ConsentSummaryDatabase =  'Hilltop'
 ConsentSummaryTable = 'ComplianceSummaryConsent' #change after run is finished
 
@@ -1254,10 +1263,10 @@ WAPSummaryCol = [
         'MaxTakeRate', #not used previous years
         'FromMonth',#not used previous years
         'ToMonth',#not used previous years
-#        'TotalVolumeAboveRestriction',
-#        'TotalDaysAboveRestriction',
+#        'TotalVolumeAboveRestriction', #unreliable
+#        'TotalDaysAboveRestriction',#unreliable
 #        'TotalVolumeAboveNDayVolume', #unreliable. not used previous years
-        'TotalDaysAboveNDayVolume', # Hope to use
+        'TotalDaysAboveNDayVolume', # added for second run
 #        'MaxVolumeAboveNDayVolume', #unreliable. not used previous years
 #        'MedianVolumeTakenAboveMaxVolume', #unreliable. not used previous years
         'TotalTimeAboveRate', #not used previous years
@@ -1275,9 +1284,8 @@ WAPSummaryColNames = {
         'ErrorMsg' : 'WS_ErrorMsg',
         'TotalDaysAboveNDayVolume' : 'WS_DaysAboveNday',
         'TotalTimeAboveRate' : 'WS_TimeAboveRate',
-        'MaxRateTaken' : 'WS_MaxRate', # not used previous years
-        'MedianRateTakenAboveMaxRate' : 'WS_MedianRateAbove', # not available in previous year
-        'TotalMissingRecord' : 'WS_TotalMissingRecord'
+        'MaxRateTaken' : 'WS_MaxRate',
+        'MedianRateTakenAboveMaxRate' : 'WS_MedianRateAbove'
         }
 WAPSummaryImportFilter = {
        'RunDate' : SummaryTableRunDate
@@ -1286,7 +1294,7 @@ WAPSummaryImportFilter = {
 WAPSummary_date_col = 'RunDate'
 WAPSummary_from_date = SummaryTableRunDate
 WAPSummary_to_date = SummaryTableRunDate
-WAPSummaryServer = 'SQL2012Test01'#'SQL2012Prod03'
+WAPSummaryServer = 'SQL2012Prod03'
 WAPSummaryDatabase =  'Hilltop'
 WAPSummaryTable = 'ComplianceSummaryWAP' #change after run is finished
 
@@ -1315,8 +1323,7 @@ WAPSummary['WS_PercentMedRate'] = (
 print('\nWAPSummary Table ',
       WAPSummary.shape,'\n',
       WAPSummary.nunique(), '\n\n')
-
-                                              
+                                             
 
 
 ##############################################################################
@@ -1360,7 +1367,11 @@ Baseline = pd.merge(Baseline, WAPSummary,
         how = 'left')
 
 # Export Baseline
-#Baseline.to_csv('Baseline' + RunDate + '.csv')
+Baseline.to_csv('Baseline' + RunDate + '.csv')
+
+Baseline.to_csv(
+        r'D:\\Implementation Support\\Python Scripts\\scripts\\Import\\'+
+        'Baseline' + RunDate + '.csv')
 
 # Print overview of table
 print('\nBaseline Table ',
