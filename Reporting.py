@@ -10,6 +10,7 @@ Created on Fri Sep  6 13:17:04 2019
 ### Import Packages
 ##############################################################################
 
+import os
 import pandas as pd
 import pdsql
 from datetime import date
@@ -21,15 +22,14 @@ from datetime import date
 ReportName= 'Water Segmentation Inspections'
 RunDate = str(date.today())
 InspectionFile = 'SegmentationInspections.csv'
-
+input_path = r'\\fs02\ManagedShares\Data\Implementation Support\WaterUseReporting\InputFiles'
+output_path = r'\\fs02\ManagedShares\Data\Implementation Support\WaterUseReporting\SegmentationReports'
 
 ##############################################################################
 #### Import Data
 ##############################################################################
 
-SegInsp = pd.read_csv(
-        r'V:\\WaterUseReporting\\InputFiles\\'+
-        InspectionFile)
+SegInsp = pd.read_csv(os.path.join(input_path, InspectionFile))
 
 SegInsp_List = SegInsp['InspectionID'].values.tolist()
 Insp_col = ['InspectionID',
@@ -46,7 +46,7 @@ Insp_ColNames = {
         }
 SegOutcomes = pdsql.mssql.rd_sql(
                     server = 'SQL2012PROD03',
-                    database = 'DataWarehouse', 
+                    database = 'DataWarehouse',
                     table = 'D_ACC_Inspections',
                     col_names = Insp_col,
                     where_in = {'InspectionID': SegInsp_List})
@@ -65,7 +65,7 @@ SegOutcomes['ConsentNo'] = SegOutcomes['ConsentNo'].str.strip().str.upper()
 ##############################################################################
 
 SegMissing_Count = SegInsp.shape[0]-SegOutcomes.shape[0]
-SegOutcomes = pd.merge(SegInsp, SegOutcomes, 
+SegOutcomes = pd.merge(SegInsp, SegOutcomes,
                         on= ['InspectionID','ConsentNo'],
                         how='outer')
 SegOutcomes['InspectionStatus'] = SegOutcomes['InspectionStatus'].fillna('Missing Inspection')
@@ -101,13 +101,13 @@ FortnightTotalInsp = SegOutcomes.groupby(
 FortnightTotalInsp.rename(columns ={'ConsentNo' : 'FortnightTotal'}, inplace=True)
 
 ### Add Total counts to list
-SegOutcomes = pd.merge(SegOutcomes, TotalInsp, 
+SegOutcomes = pd.merge(SegOutcomes, TotalInsp,
                         on=['Fortnight'],
                         how='left')
-SegOutcomes = pd.merge(SegOutcomes, ZoneTotalInsp, 
+SegOutcomes = pd.merge(SegOutcomes, ZoneTotalInsp,
                         on=['Zone'],
                         how='left')
-SegOutcomes = pd.merge(SegOutcomes, FortnightTotalInsp, 
+SegOutcomes = pd.merge(SegOutcomes, FortnightTotalInsp,
                         on=['Zone','Fortnight'],
                         how='left')
 
@@ -146,13 +146,9 @@ AllGrades.fillna(0, inplace= True)
 ### Export Results
 ##############################################################################
 
-ZoneGrades.to_csv(
-        r'\\punakorero@SSL\\DavWWWRoot\\groups\\regimp\\Projects\\WaterUseReporting\\SegmentationReports\\'+
-        'ZoneGrades' + RunDate + '.csv')
+ZoneGrades.to_csv(os.path.join(output_path, 'ZoneGrades_' +  RunDate + '.csv'))
 
-AllGrades.to_csv(
-        r'\\punakorero@SSL\\DavWWWRoot\\groups\\regimp\\Projects\\WaterUseReporting\\SegmentationReports\\'+
-        'AllGrades' + RunDate + '.csv')
+AllGrades.to_csv(os.path.join(output_path, 'AllGrades_' + RunDate + '.csv'))
 
 
 
