@@ -22,7 +22,7 @@ ReportName= 'Water Inspection Prioritzation Model - Risk Calculation'
 RunDate = str(date.today())
 
 ### Baseline File
-BaselineFile = 'Baseline2019-09-18.csv'
+BaselineFile = 'Baseline2019-09-23.csv'
 
 
 ##############################################################################
@@ -171,7 +171,7 @@ Segmentation['SharedWAPRisk'] = np.select(
 
 ### Under 5ls Warning
 HighRiskUnder5ls = 'Warning'
-LowRiskSharedUnder5ls = ''
+LowRiskUnder5ls = ''
 
 conditions = [
 	(Segmentation['WAPRate'] < 5),
@@ -180,8 +180,20 @@ choices = [HighRiskUnder5ls]
 Segmentation['Under5lsRisk'] = np.select(
                                         conditions, 
                                         choices, 
-                                        default = LowRiskSharedUnder5ls)
+                                        default = LowRiskUnder5ls)
 
+### No WAP Warning
+HighRiskNoWAP = 'Warning'
+LowRiskNoWAP = ''
+
+conditions = [
+	(Segmentation['WAP'].isnull()),
+			 ]
+choices = [HighRiskNoWAP]
+Segmentation['NoWAPRisk'] = np.select(
+                                        conditions, 
+                                        choices, 
+                                        default = LowRiskNoWAP)
 
 
 ##############################################################################
@@ -311,7 +323,7 @@ conditions = [
         ((Segmentation['CS_PercentAnnualVolume'] > MedVolumeThresholdAV) & 
         (Segmentation['CS_PercentAnnualVolume'] <= HighVolumeThresholdAV))
              ]
-choices = [NoiseRiskAV, LowRiskAV, MedRiskMR, HighRiskAV]
+choices = [NoiseRiskAV, LowRiskAV, MedRiskAV, HighRiskAV]
 Segmentation['CS_AVNC'] = np.select(conditions, choices, default = np.nan)
 
 
@@ -429,8 +441,7 @@ Segmentation['InspectionAssignment'] = np.select(
 conditions = [
         ((Segmentation['CampaignRisk'] == 'Warning') |
                (Segmentation['Under5lsRisk'] == 'Warning') |
-               (Segmentation['InactiveWellRisk'] == 'Warning') |
-               (Segmentation['WaiverRisk'] == 'Warning') |
+               (Segmentation['NoWAPRisk'] == 'Warning') |
                (Segmentation['MidSeasonRisk'] == 'Warning')),
          ((Segmentation['AMRisk'] == 'Warning') |
           (Segmentation['WUGRisk'] == 'Warning')      
@@ -525,11 +536,14 @@ SegmentationOut.to_csv(
 ### Create Table of Inspections
 ##############################################################################
 
-InspectionList = Segmentation[Segmentation['InspectionNecessity'] != 0]
+#InspectionList = Segmentation[Segmentation['InspectionNecessity'] != 0]
+
+InspectionList = Segmentation.copy()
 
 InspectionList = InspectionList.groupby(
         ['ConsentNo'], as_index=False
         ).agg({
+                'ConsentStatus' : 'max',
                 'HolderAddressFullName': 'max',
                 'CWMSZone' :'max',
                 'AdMan' :'max',
@@ -538,7 +552,7 @@ InspectionList = InspectionList.groupby(
                 'CampaignRisk' : 'max',
                 'TotalRisk': 'max',
                 'InspectionAssignment' : 'max',
-                'InspectionNecessity' : 'min',
+                'InspectionNecessity' : 'max',
                 'WAPsOnConsent' : 'max',               
                 'ConsentsOnWAP' : 'max',
                 'ComplexityLevel' : 'max'

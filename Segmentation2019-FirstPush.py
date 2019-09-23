@@ -60,6 +60,9 @@ SegmentationNote = pd.read_csv(
 ### Select First Run of Inspections
 ##############################################################################
 
+### Remove unecessary inspections
+InspectionList = InspectionList[InspectionList['InspectionNecessity'] != 0]
+
 ### Remove Midseason Inspections
 MidSeasonCount = Segmentation[Segmentation['InspectionID'].notnull()]
 
