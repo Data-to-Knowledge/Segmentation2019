@@ -13,23 +13,22 @@ import pandas as pd
 from datetime import datetime, timedelta, date
 import random
 import pdsql
+import networkx as nx
 
 
 ##############################################################################
 ### Set Variables
 ##############################################################################
 
-# Base Variable
+# Base Variables
 ReportName= 'Water Inspection Prioritzation Model - Inspection Allocation 1'
 RunDate = str(date.today())
 
-### Baseline File
-
+### Import Files
 InspectionFile = 'InspectionList2019-09-23.csv'
 SegmentationFile = 'Segmentation2019-09-23.csv'
 SegmentationNoteFile = 'SegmentationNote2019-09-23.csv'
 InspectionAllocationFile = 'FirstSegmentationInspections-Edited.csv'
-
 
 ### WUG Variables
 WUGRMO = 'JANAH'
@@ -63,7 +62,7 @@ FortnightDate5 = '2019-11-04'
 ### Import data
 ##############################################################################
 
-#Upload baseline
+#Import data
 
 InspectionList = pd.read_csv(
         r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\" +
@@ -81,26 +80,10 @@ InspectionAllocation = pd.read_csv(
         r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\" +
         InspectionAllocationFile)
 
-##############################################################################
-### Select Second Run of Inspections
-##############################################################################
-
-### Remove unecessary inspections
-SecondInspections = InspectionList[InspectionList['InspectionNecessity'] != 0]
-
-### remove all inspections already assigned
-SecondInspections = pd.merge(SecondInspections, InspectionAllocation, on = 'ConsentNo', how = 'left')
-SecondInspections = SecondInspections[SecondInspections['InspectionID'].isnull()]
-SecondInspections = SecondInspections.drop(
-        ['Fortnight', 
-         'ScheduledDate'
-            ], axis=1)
-
 
 ##############################################################################
-### Find current RMO on inspection
+### Find current RMO on inspections
 ##############################################################################
-
 
 Allo_Insp_List = InspectionAllocation['InspectionID'].values.tolist()
 
@@ -125,6 +108,23 @@ temp['InspectionStatus'] = temp['InspectionStatus'].fillna('Missing Inspection')
 
 InspectionAllocation = pd.merge(InspectionAllocation, temp, on = 'InspectionID', how = 'left')
 
+### Print number of inspections from Push 1
+print('First Push Inspections: ', InspectionAllocation.InspectionID.count())
+
+##############################################################################
+### Select Second Run of Inspections
+##############################################################################
+
+### Remove unecessary inspections
+SecondInspections = InspectionList[InspectionList['InspectionNecessity'] != 0]
+
+### remove all inspections already assigned
+SecondInspections = pd.merge(SecondInspections, InspectionAllocation, on = 'ConsentNo', how = 'left')
+SecondInspections = SecondInspections[SecondInspections['InspectionID'].isnull()]
+SecondInspections = SecondInspections.drop(
+        ['Fortnight', 
+         'ScheduledDate'
+            ], axis=1)
 
 
 ###############################################################################
@@ -141,28 +141,12 @@ WUGInspections['Fortnight'] = WUGFortnight
 WUGInspections['ScheduledDate'] = FortnightDate3
 WUGInspections['InspectionStatus'] = 'Pending'
 
+### Print number of WUG inspections
+print('WUG Inspections: ', WUGInspections.ConsentNo.count())
 
-
-#
-#### Remove WUG inspections
-#SecondInspections = pd.merge(SecondInspections, WUGInspections, on = 'ConsentNo', how = 'left')
-#SecondInspections = SecondInspections[SecondInspections['RMO'].isnull()]
-#
-#
-#
-#
-#### Select all associated consents
-#AssociatedInspections = SecondInspections[(SecondInspections['ConsentsOnWAP'] > 1 )]
-#
-#AssociatedWAPs = Segmentation[Segmentation['ConsentsOnWAP'] >1]
-#AssociatedWAPs = AssociatedWAPs[['ConsentNo','WAP']]
-#
-#AssociatedWAPs = pd.merge(AssociatedInspections, AssociatedWAPs, on = 'ConsentNo', how = 'left')
-#
-#AssociatedWAPs = AssociatedWAPs[['ConsentNo','WAPsOnConsent','WAP','ConsentsOnWAP']]
 
 ##############################################################################
-### Inspections lists
+### Create assigned inspections lists
 ##############################################################################
 
 WInspections = WUGInspections.copy()
@@ -170,7 +154,6 @@ WInspections = WInspections[['ConsentNo','RMO','InspectionStatus']]
 
 AInspections = InspectionAllocation.copy()
 AInspections = AInspections[['ConsentNo','RMO','InspectionStatus']]
-
 
 LinkedInspections = AInspections.append(WInspections, ignore_index = True)
 
@@ -189,7 +172,6 @@ df = pd.merge(AW1, AW2, on = 'WAP', how = 'left')
 df= df[['ConsentNo','AssociatedConsent']]
 df = df.drop_duplicates()
 
-
 ### Create assocations list for EC holder
 temp = Segmentation[['ConsentNo','HolderAddressFullName']]
 temp = temp[temp['HolderAddressFullName'].notnull()]
@@ -199,12 +181,6 @@ AE2.columns= ['AssociatedConsent', 'HolderAddressFullName']
 df2 = pd.merge(AE1, AE2, on = 'HolderAddressFullName', how = 'left')
 df2= df2[['ConsentNo','AssociatedConsent']]
 df2 = df2.drop_duplicates()
-
-
-### Join the two lists
-df = df.append(df2, ignore_index = True)
-df = df.drop_duplicates()
-
 
 ### Calculate groups of assoicated consents
 df.columns= ['ConsentNo', 'AssociatedConsent']
@@ -229,16 +205,13 @@ dfcount = df.groupby(
     
 dfcount.columns= ['GroupNo', 'GroupSize']
 dfcount = dfcount.drop_duplicates()  
-  
-### Number of groups
-df.GroupNo.max()
-
-### largest group
-dfcount.GroupSize.max()
 
 ### join lists
 df = pd.merge(df, dfcount, on = 'GroupNo', how = 'left')
-
+  
+### Print stats for spot check
+print('Number of Groups: ', df.GroupNo.max())
+print('Largest Group: ', dfcount.GroupSize.max())
 
 
 ### Join associations to supporting information
@@ -247,12 +220,11 @@ AssociatedConsents = pd.merge(df, InspectionList, on = 'ConsentNo', how = 'left'
 ### Mark allocated inspections
 AssociatedConsents = pd.merge(AssociatedConsents, LinkedInspections, on = 'ConsentNo', how = 'left')
 
-
+### Output table
 AssociatedConsents.to_csv(
         r'D:\\Implementation Support\\Python Scripts\\scripts\\Import\\'+
         'AssociatedConsents' + RunDate + '.csv')
 
-#########################################
 
 ##############################################################################
 ### Find associated Consents already allocated
@@ -270,8 +242,6 @@ NextAAInspections = NextAAInspections[NextAAInspections['GroupSize'] > 1]
 
 
 
-
-
 Problems = AAInspections.groupby(
   ['GroupNo'], as_index=False
   ).agg(
@@ -283,6 +253,12 @@ Problems.rename(columns = {'RMO':'RMOCount'}, inplace=True)
 Problems = Problems[Problems['RMOCount'] > 1 ]
 
 NextAAInspections = pd.merge(NextAAInspections, Problems, on = 'GroupNo', how = 'left')
+
+print('Associated Inspections already allocated : ', NextAAInspections.RMO.count())
+print('Associated Inspections to be allocated : ', NextAAInspections.ConsentNo.count() - NextAAInspections.RMO.count())
+
+
+
 
 ##########################################
 Fortnight3 = SecondRunCountF3 / 4
