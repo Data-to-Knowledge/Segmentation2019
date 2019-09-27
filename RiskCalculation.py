@@ -211,8 +211,8 @@ Segmentation['LatestInspection'] = pd.to_datetime(
                                         errors='coerce')
 
 conditions = [
-	(Segmentation['LatestInspection'] <= DateThresholdLatestInspection),
-	(Segmentation['LatestInspection'] > DateThresholdLatestInspection),
+	(Segmentation['LatestInspection'] >= DateThresholdLatestInspection),
+	(Segmentation['LatestInspection'] < DateThresholdLatestInspection),
     (Segmentation['LatestInspection'].isnull())
 			 ]
 choices = [LowRiskLatestInspection, 
@@ -237,8 +237,8 @@ Segmentation['LatestNonComplianceDate'] = pd.to_datetime(
                                         errors='coerce')
 
 conditions = [
-	(Segmentation['LatestNonComplianceDate'] < DateThresholdLatestNonComp),
 	(Segmentation['LatestNonComplianceDate'] >= DateThresholdLatestNonComp),
+	(Segmentation['LatestNonComplianceDate'] < DateThresholdLatestNonComp),
     (Segmentation['LatestNonComplianceDate'].isnull())
 			 ]
 choices = [HighRiskLatestNonComp,MedRiskLatestNonComp,LowRiskLatestNonComp]

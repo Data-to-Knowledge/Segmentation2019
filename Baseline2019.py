@@ -1090,7 +1090,7 @@ Inspection_from_date = InspectionStartDate
 Inspection_to_date = InspectionEndDate
 InspectionServer = 'SQL2012Prod03'
 InspectionDatabase = 'DataWarehouse'
-InspectionTable = 'D_ACC_Inspections '
+InspectionTable = 'D_ACC_Inspections'
 
 Inspection = pdsql.mssql.rd_sql(
                    server = InspectionServer,
