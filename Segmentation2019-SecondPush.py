@@ -8,6 +8,7 @@ Created on Thu Apr 18 14:52:35 2019
 ### Import Packages
 ##############################################################################
 
+import os
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta, date
@@ -29,17 +30,28 @@ InspectionFile = 'InspectionList2019-09-23.csv'
 SegmentationFile = 'Segmentation2019-09-23.csv'
 SegmentationNoteFile = 'SegmentationNote2019-09-23.csv'
 InspectionAllocationFile = 'FirstSegmentationInspections-Edited.csv'
+OWLConsentsFile = 'OWLConsents.csv'
+
+
+### File Location
+input_path = r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\"
+output_path = r"D:\\Implementation Support\\Python Scripts\\scripts\\Export\\"
 
 ### WUG Variables
 WUGRMO = 'JANAH'
 WUGFortnight = 3
 
+### OWL Variables
+OWLRMO = 'HANNAHDU'
+OWLFortnight = 3
+
+
 ### Allocation totals per fortnight
 FirstRunCountF1 = 625
 FirstRunCountF2 = 616
-SecondRunCountF3 = 632 #TBC
-SecondRunCountF4 = 632 #TBC
-SecondRunCountF5 = 616 #TBC
+SecondRunCountF3 = 325 #TBC
+SecondRunCountF4 = 315 #TBC
+SecondRunCountF5 = 325 #TBC
 
 
 FortnightDate1 = '2019-09-09'
@@ -57,6 +69,9 @@ FortnightDate5 = '2019-11-04'
 #CRC168335	Adapt.Vol
 #CRC173343	Adapt.Vol
 
+#falsely created ( OWL )
+#CRC000265.2	1520130	LEE-ANNM
+#CRC162722	1519806	LEE-ANNM
 
 ##############################################################################
 ### Import data
@@ -64,21 +79,15 @@ FortnightDate5 = '2019-11-04'
 
 #Import data
 
-InspectionList = pd.read_csv(
-        r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\" +
-        InspectionFile)
+InspectionList = pd.read_csv(os.path.join(input_path, InspectionFile))
 
-Segmentation = pd.read_csv(
-        r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\" +
-        SegmentationFile)
+Segmentation = pd.read_csv(os.path.join(input_path, SegmentationFile))
 
-SegmentationNote = pd.read_csv(
-        r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\" +
-        SegmentationNoteFile)
+SegmentationNote = pd.read_csv(os.path.join(input_path, SegmentationNoteFile))
 
-InspectionAllocation = pd.read_csv(
-        r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\" +
-        InspectionAllocationFile)
+InspectionAllocation = pd.read_csv(os.path.join(input_path, InspectionAllocationFile))
+
+OWLConsents = pd.read_csv(os.path.join(input_path, OWLConsentsFile))
 
 
 ##############################################################################
@@ -110,6 +119,7 @@ InspectionAllocation = pd.merge(InspectionAllocation, temp, on = 'InspectionID',
 
 ### Print number of inspections from Push 1
 print('First Push Inspections: ', InspectionAllocation.InspectionID.count())
+
 
 ##############################################################################
 ### Select Second Run of Inspections
@@ -145,6 +155,26 @@ WUGInspections['InspectionStatus'] = 'Pending'
 print('WUG Inspections: ', WUGInspections.ConsentNo.count())
 
 
+###############################################################################
+### Remove Opua Members inspections
+###############################################################################
+
+### List WUG inspections
+
+
+OWLInspections = pd.merge(SecondInspections, OWLConsents, on = 'ConsentNo', how = 'left')
+OWLInspections = OWLInspections[(OWLInspections['OWLConsent'].notnull())]
+
+OWLInspections = OWLInspections[['ConsentNo']]
+
+OWLInspections['RMO'] = OWLRMO
+OWLInspections['Fortnight'] = OWLFortnight
+OWLInspections['ScheduledDate'] = FortnightDate3
+OWLInspections['InspectionStatus'] = 'Pending'
+
+### Print number of WUG inspections
+print('OWL Inspections: ', OWLInspections.ConsentNo.count())
+
 ##############################################################################
 ### Create assigned inspections lists
 ##############################################################################
@@ -152,10 +182,13 @@ print('WUG Inspections: ', WUGInspections.ConsentNo.count())
 WInspections = WUGInspections.copy()
 WInspections = WInspections[['ConsentNo','RMO','InspectionStatus']]
 
+OInspections = OWLInspections.copy()
+OInspections = OInspections[['ConsentNo','RMO','InspectionStatus']]
+
 AInspections = InspectionAllocation.copy()
 AInspections = AInspections[['ConsentNo','RMO','InspectionStatus']]
 
-LinkedInspections = AInspections.append(WInspections, ignore_index = True)
+LinkedInspections = AInspections.append([WInspections, OInspections], ignore_index = True)
 
 
 ##############################################################################
