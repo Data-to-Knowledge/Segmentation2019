@@ -151,6 +151,8 @@ ZoneGrades.to_csv(os.path.join(output_path, 'ZoneGrades_' +  RunDate + '.csv'))
 AllGrades.to_csv(os.path.join(output_path, 'AllGrades_' + RunDate + '.csv'))
 
 
+SegOutcomes.to_csv(os.path.join(output_path, 'InspectionDetails_' + RunDate + '.csv'))
+
 
 
 
