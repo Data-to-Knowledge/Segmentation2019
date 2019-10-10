@@ -84,7 +84,7 @@ FirstInspections = pd.merge(FirstInspections, F1InspectionsList, on = 'ConsentNo
 FirstInspections = FirstInspections[(FirstInspections['Fortnight'] != 1)]
 FirstInspections = FirstInspections.drop(['Fortnight'], axis=1)
 
-### Choose Inspections for Fornight 1
+### Choose Inspections for Fornight 2
 F2Inspections = FirstInspections.sample(n=Fortnight2, weights = 'TotalRisk', random_state = 1)
 F2Inspections['Fortnight'] = 2
 F2InspectionsList = F2Inspections[['ConsentNo','Fortnight']]

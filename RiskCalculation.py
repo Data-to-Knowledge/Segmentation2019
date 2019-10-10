@@ -22,7 +22,7 @@ ReportName= 'Water Inspection Prioritzation Model - Risk Calculation'
 RunDate = str(date.today())
 
 ### Baseline File
-BaselineFile = 'Baseline2019-09-23.csv'
+BaselineFile = 'Baseline2019-10-07.csv'
 
 
 ##############################################################################

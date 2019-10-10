@@ -26,11 +26,13 @@ ReportName= 'Water Inspection Prioritzation Model - Inspection Allocation 1'
 RunDate = str(date.today())
 
 ### Import Files
-InspectionFile = 'InspectionList2019-09-23.csv'
-SegmentationFile = 'Segmentation2019-09-23.csv'
-SegmentationNoteFile = 'SegmentationNote2019-09-23.csv'
+InspectionFile = 'InspectionList2019-10-07.csv'
+SegmentationFile = 'Segmentation2019-10-07.csv'
+SegmentationNoteFile = 'SegmentationNote2019-10-07.csv'
 InspectionAllocationFile = 'FirstSegmentationInspections-Edited.csv'
 OWLConsentsFile = 'OWLConsents.csv'
+AssociatedInspectionsFile = 'AssociatedInspections.csv'
+OfficersFile = 'Officers.csv'
 
 
 ### File Location
@@ -49,9 +51,9 @@ OWLFortnight = 3
 ### Allocation totals per fortnight
 FirstRunCountF1 = 625
 FirstRunCountF2 = 616
-SecondRunCountF3 = 325 #TBC
-SecondRunCountF4 = 315 #TBC
-SecondRunCountF5 = 325 #TBC
+SecondRunCountF3 = 0 
+SecondRunCountF4 = 310 
+SecondRunCountF5 = 320 
 
 
 FortnightDate1 = '2019-09-09'
@@ -88,6 +90,10 @@ SegmentationNote = pd.read_csv(os.path.join(input_path, SegmentationNoteFile))
 InspectionAllocation = pd.read_csv(os.path.join(input_path, InspectionAllocationFile))
 
 OWLConsents = pd.read_csv(os.path.join(input_path, OWLConsentsFile))
+
+AssociatedInspections = pd.read_csv(os.path.join(input_path, AssociatedInspectionsFile))
+
+Officers = pd.read_csv(os.path.join(input_path, OfficersFile))
 
 
 ##############################################################################
@@ -133,7 +139,9 @@ SecondInspections = pd.merge(SecondInspections, InspectionAllocation, on = 'Cons
 SecondInspections = SecondInspections[SecondInspections['InspectionID'].isnull()]
 SecondInspections = SecondInspections.drop(
         ['Fortnight', 
-         'ScheduledDate'
+         'ScheduledDate',
+         'RMO',
+         'InspectionStatus'
             ], axis=1)
 
 
@@ -148,7 +156,7 @@ WUGInspections = WUGInspections[['ConsentNo']]
 
 WUGInspections['RMO'] = WUGRMO
 WUGInspections['Fortnight'] = WUGFortnight
-WUGInspections['ScheduledDate'] = FortnightDate3
+WUGInspections['ScheduledDate'] = FortnightDate4
 WUGInspections['InspectionStatus'] = 'Pending'
 
 ### Print number of WUG inspections
@@ -169,7 +177,7 @@ OWLInspections = OWLInspections[['ConsentNo']]
 
 OWLInspections['RMO'] = OWLRMO
 OWLInspections['Fortnight'] = OWLFortnight
-OWLInspections['ScheduledDate'] = FortnightDate3
+OWLInspections['ScheduledDate'] = FortnightDate4
 OWLInspections['InspectionStatus'] = 'Pending'
 
 ### Print number of WUG inspections
@@ -239,8 +247,10 @@ dfcount = df.groupby(
 dfcount.columns= ['GroupNo', 'GroupSize']
 dfcount = dfcount.drop_duplicates()  
 
+
 ### join lists
 df = pd.merge(df, dfcount, on = 'GroupNo', how = 'left')
+
   
 ### Print stats for spot check
 print('Number of Groups: ', df.GroupNo.max())
@@ -250,6 +260,36 @@ print('Largest Group: ', dfcount.GroupSize.max())
 ### Join associations to supporting information
 AssociatedConsents = pd.merge(df, InspectionList, on = 'ConsentNo', how = 'left')
 
+##############################################################################
+### Calculated Terminated Associations
+##############################################################################
+
+AssociatedConsentsTerm = AssociatedConsents.groupby(
+  ['GroupNo'], as_index=False
+  ).agg(
+          {
+          'ConsentStatus' : 'max'
+          })
+    
+AssociatedConsentsTerm['TerminatedNote'] = np.where(AssociatedConsentsTerm['ConsentStatus'] == 'Terminated - Replaced',
+                                        'Some assoicated consents were terminated after October 2018',
+                                            ' ')
+
+### Join Terminated Associations to main set
+AssociatedConsentsTerm = AssociatedConsentsTerm.drop(
+        ['ConsentStatus'], axis=1)
+AssociatedConsents = AssociatedConsents.drop(
+        ['Unnamed: 0'], axis=1)
+AssociatedConsents = pd.merge(AssociatedConsents, AssociatedConsentsTerm, on = 'GroupNo', how = 'left')
+
+###Add Note on Associations
+AssociatedConsents['AssociationNote'] = np.where(AssociatedConsents['GroupSize'] > 1,
+                                        'There are ' +
+                                        AssociatedConsents['GroupSize'].astype(str) +
+                                        'consents associated by WAP to this consent'+
+                                        AssociatedConsents['TerminatedNote'],
+                                        ' '
+                                        )
 ### Mark allocated inspections
 AssociatedConsents = pd.merge(AssociatedConsents, LinkedInspections, on = 'ConsentNo', how = 'left')
 
@@ -288,321 +328,108 @@ Problems = Problems[Problems['RMOCount'] > 1 ]
 NextAAInspections = pd.merge(NextAAInspections, Problems, on = 'GroupNo', how = 'left')
 
 print('Associated Inspections already allocated : ', NextAAInspections.RMO.count())
-print('Associated Inspections to be allocated : ', NextAAInspections.ConsentNo.count() - NextAAInspections.RMO.count())
+print('Associated Inspections not to be allocated : ', NextAAInspections.ConsentNo.count() - NextAAInspections.RMO.count())
+
+
+NextAAInspections.to_csv(
+        r'D:\\Implementation Support\\Python Scripts\\scripts\\Import\\'+
+        'Problems' + RunDate + '.csv')
+
+##############################################################################
+### Import Assoicated consent allocations
+##############################################################################
+
+AssociatedInspections = pd.read_csv(os.path.join(input_path, AssociatedInspectionsFile))
+
+
+print('Associated Inspections: ', AssociatedInspections.ConsentNo.count())
+
+##############################################################################
+### Create Fornight 4 inspection list
+##############################################################################
+ASInspections = AssociatedInspections.copy()
+ASInspections = ASInspections[['ConsentNo','RMO']]
+
+F4Inspections = ASInspections.append([WInspections, OInspections], ignore_index = True)
+
+F4Inspections['ScheduledDate'] = FortnightDate4
+F4Inspections['InspectionStatus'] = 'Pending'
+
+
+print('F4 Inspections: ', F4Inspections.ConsentNo.count())
+
+##############################################################################
+### Create pick list for Fortnight 5 Inspections
+##############################################################################
+
+### remove associated consents
+UnAssociatedConsents = SecondInspections[SecondInspections['ConsentsOnWAP'] == 1]   
+    
+### remove inspections already assigned
+AllInspections = AInspections.append([F4Inspections], ignore_index = True,sort=True)
+
+F5Consents = pd.merge(UnAssociatedConsents, AllInspections, on = 'ConsentNo', how = 'left')
+F5Consents = F5Consents[F5Consents['RMO'].isnull()]
+F5Consents = F5Consents.drop(
+        [
+         'ScheduledDate',
+         'RMO',
+         'InspectionStatus'
+            ], axis=1)
+    
+### Remove Terminated consents
+F5Consents = F5Consents[F5Consents['ConsentStatus'] != 'Terminated - Replaced']
 
 
 
+##############################################################################
+### Allocate Fornight 5 Inspections
+##############################################################################
+    
+F5Inspections = F5Consents.sample(n=SecondRunCountF5, weights = 'TotalRisk', random_state = 1)
+F5Inspections['Fortnight'] = 5
+F5Inspections.loc[F5Inspections['Fortnight'] == 5, 'RMO'] = random.choices(Officers['AccelaUserID'],Officers['F5Weight'], k= SecondRunCountF5)
+F5Inspections['ScheduledDate'] = FortnightDate5
+F5Inspections['InspectionStatus'] = 'Pending'
 
-##########################################
-Fortnight3 = SecondRunCountF3 / 4
-#
-#### Choose Inspections for Fornight 1
-#F3Inspections = FirstInspections.sample(n=Fortnight3, weights = 'TotalRisk', random_state = 1)
-#F3Inspections['Fortnight'] = 1
-#
-#F3InspectionsList = F1Inspections[['ConsentNo','Fortnight']]
-#
+F5Inspections = F5Inspections[['ConsentNo','RMO','InspectionStatus','ScheduledDate']]
 #FirstInspections = pd.merge(FirstInspections, F1InspectionsList, on = 'ConsentNo', how = 'left')
 #FirstInspections = FirstInspections[(FirstInspections['Fortnight'] != 1)]
 #FirstInspections = FirstInspections.drop(['Fortnight'], axis=1)
-#
-#### Choose Inspections for Fornight 1
+
+#### Choose Inspections for Fornight 2
 #F2Inspections = FirstInspections.sample(n=Fortnight2, weights = 'TotalRisk', random_state = 1)
 #F2Inspections['Fortnight'] = 2
 #F2InspectionsList = F2Inspections[['ConsentNo','Fortnight']]
-#
-#
-#
+
 #
 #InspectionAllocations = pd.concat([
 #                                F1InspectionsList,
 #                                F2InspectionsList
 #                                ])
-#
-#InspectionAllocations = pd.merge(InspectionAllocations, InspectionList, on = 'ConsentNo', how = 'left')
-#
-#
-#Officers = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\Officers.csv")
-#
-#
-#
-#InspectionAllocations.loc[InspectionAllocations['Fortnight'] == 1, 'RMO'] = random.choices(Officers['RMO'],Officers['F1Weight'], k= Fortnight1)
-#InspectionAllocations.loc[InspectionAllocations['Fortnight'] == 2, 'RMO'] = random.choices(Officers['RMO'],Officers['F2Weight'], k= FirstRunCountF2)
-#
-#FirstPush = InspectionAllocations[InspectionAllocations['Fortnight'].notnull()]
-#
-#FirstPush.to_csv('FirstPush.csv')
-#
-#MidseasonInspections = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\MidseasonInspections.csv")
-#
-#MidseasonInspectionList = Segmentation[Segmentation['MidSeasonRisk'] == 'Warning']
-#
-#MidseasonInspectionList = MidseasonInspectionList.groupby(
-#        ['ConsentNo'], as_index=False
-#        ).agg({
-#                'HolderAddressFullName': 'max',
-#                'CWMSZone' :'max',
-#                'TotalRisk': 'max',
-#                'InspectionAssignment' : 'max',
-#                'InspectionNecessity' : 'min',
-#                'AdMan' : 'max',
-#                'ComplexityLevel' : 'max'
-#                })
-#
-#MidseasonInspectionList['RMO'] = random.choices(Officers['RMO'],Officers['F1Weight'], k=len(MidseasonInspectionList))
-#
-#MidseasonInspectionList = pd.merge(MidseasonInspectionList, MidseasonInspections, on = 'ConsentNo', how = 'left')
-#
-#MidseasonInspectionList.to_csv('MidseasonInspectionList.csv')
-#
-###############################################################################
-#### First Allocation
-###############################################################################
-#
-#
-#InspectionAllocations = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\FirstPush-Edit.csv")
-#
-#Officers = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\Officers.csv")
-#
-#OfficerLink = Officers[['RMO','AccelaUserID']]
-#
-#
-#InspectionAllocations = pd.merge(InspectionAllocations, OfficerLink, on = 'RMO', how = 'left')
-#
-#InspectionAllocations = pd.merge(InspectionAllocations, SegmentationNote, on = 'ConsentNo', how = 'left')
-#
-#InspectionAllocations = pd.merge(InspectionAllocations, InspectionList, on = 'ConsentNo', how = 'left')
-#
-#conditions = [
-#	(InspectionAllocations['Fortnight'] == 1),
-#	(InspectionAllocations['Fortnight'] == 2)
-#			 ]
-#choices = [FortnightDate1, FortnightDate2]
-#InspectionAllocations['FortnightDate'] = np.select(conditions, choices, default = np.nan)
-#
-#InspectionAllocations['Consent'] = InspectionAllocations['ConsentNo']
-#InspectionAllocations['InspectionType'] = 'Desk Top Inspection'
-#InspectionAllocations['InspectionSubType'] = 'Water Use Data'
-#InspectionAllocations['ScheduledDate']  = InspectionAllocations['FortnightDate']
-#InspectionAllocations['InspectionDate']  = ' '
-#InspectionAllocations['InspectionStatus'] = 'Scheduled'
-#InspectionAllocations['AssignedTo'] = InspectionAllocations['AccelaUserID']
-#InspectionAllocations['Department'] = ' '
-#InspectionAllocations['GeneralComments'] = InspectionAllocations['InspectionNote']
-#
-#ScheduleInspections = InspectionAllocations[[
-#                                              'Consent',
-#                                              'InspectionType',
-#                                              'InspectionSubType',
-#                                              'ScheduledDate',
-#                                              'InspectionDate',
-#                                              'InspectionStatus',
-#                                              'AssignedTo',
-#                                              'Department',
-#                                              'GeneralComments',
-#                                              'ConsentsOnWAP' 
-#                                             ]]
-#ScheduleInspections.to_csv('WaterSegmentationInspections' + RunDate +'.csv')
-#
-###############################################################################
-#### Second Push
-##############################################################################
-#MidseasonInspectionsList = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\MidseasonInspectionList.csv")
-#
-#FirstPush = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\FirstPush.csv")
-#
-#FirstPushList = FirstPush[['ConsentNo','Fortnight']]
-#
-#
-#
-#SecondInspections = InspectionList
-#
-#SecondInspections = pd.merge(SecondInspections, FirstPushList, on = 'ConsentNo', how = 'left')
-#SecondInspections = SecondInspections[SecondInspections['Fortnight'].isnull()]
-#
-#SecondInspections = SecondInspections.drop(['Fortnight'], axis=1)
-#
-#NecessaryInspections = SecondInspections[(SecondInspections['InspectionNecessity'] == 2)]
-#SampledInspections = SecondInspections[(SecondInspections['InspectionNecessity'] != 2)]
-#
-#
-#
-#NecessaryInspections['Fortnight'] = np.random.randint(low=3, high=6, size=len(NecessaryInspections))
-#
-#NecessaryInspectionsCount =  NecessaryInspections.groupby(
-#                                            ['Fortnight'], as_index = False
-#                                            ).agg({'ConsentNo' : 'count'})
-#
-#
-#NecessaryInspectionsList = NecessaryInspections[['ConsentNo','Fortnight']]
-#
-#NecessaryGroup3 = NecessaryInspectionsCount[NecessaryInspectionsCount['Fortnight'] == 3].iloc[0,1]
-#NecessaryGroup4 = NecessaryInspectionsCount[NecessaryInspectionsCount['Fortnight'] == 4].iloc[0,1]
-#NecessaryGroup5 = NecessaryInspectionsCount[NecessaryInspectionsCount['Fortnight'] == 5].iloc[0,1]
-#
-#WUGInspections = Segmentation.groupby(
-#        ['WUGNo'], as_index=False
-#        ).agg({
-#                'WUGName': 'max',
-#                'CWMSZone' :'max',
-#                'TotalRisk': 'max',               
-#                'InspectionAssignment' : 'max',
-#                'InspectionNecessity' : 'min',
-#                'ConsentsOnWAP' : 'max',
-#                'ComplexityLevel' : 'max'
-#                })
-# 
-#WUGInspections['Fortnight'] = np.random.randint(low=3, high=6, size=len(WUGList))
-#
-#
-#
-#WUGInspectionList = WUGInspections[['WUGNo','Fortnight']]
-#
-#WUGInspectionCount =  WUGInspections.groupby(
-#                                        ['Fortnight'], as_index = False
-#                                        ).agg({'WUGNo' : 'count'})
-#
-#WUGGroup3 = WUGInspectionCount[WUGInspectionCount['Fortnight'] == 3].iloc[0,1]
-#WUGGroup4 = WUGInspectionCount[WUGInspectionCount['Fortnight'] == 4].iloc[0,1]
-#WUGGroup5 = WUGInspectionCount[WUGInspectionCount['Fortnight'] == 5].iloc[0,1]
-#
-#
-#Fortnight3 = SecondRunCountF3-NecessaryGroup3 - WUGGroup3
-#Fortnight4 = SecondRunCountF4-NecessaryGroup4 - WUGGroup4
-#Fortnight5 = SecondRunCountF5-NecessaryGroup5 - WUGGroup5
-#
-#
-#
-#F3Inspections = SampledInspections.sample(n=Fortnight3, weights = 'TotalRisk', random_state = 1)
-#F3Inspections['Fortnight'] = 3
-#F3InspectionsList = F3Inspections[['ConsentNo','Fortnight']]
-#
-#SampledInspections = pd.merge(SampledInspections, F3InspectionsList, on = 'ConsentNo', how = 'left')
-#SampledInspections = SampledInspections[(SampledInspections['Fortnight'] != 3)]
-#SampledInspections = SampledInspections.drop(['Fortnight'], axis=1)
-#
-#
-#F4Inspections = SampledInspections.sample(n=Fortnight4, weights = 'TotalRisk', random_state = 1)
-#F4Inspections['Fortnight'] = 4
-#F4InspectionsList = F4Inspections[['ConsentNo','Fortnight']]
-#
-#SampledInspections = pd.merge(SampledInspections, F4InspectionsList, on = 'ConsentNo', how = 'left')
-#SampledInspections = SampledInspections[(SampledInspections['Fortnight'] != 4)]
-#SampledInspections = SampledInspections.drop(['Fortnight'], axis=1)
-#
-#
-#F5Inspections = SampledInspections.sample(n=Fortnight5, weights = 'TotalRisk', random_state = 1)
-#F5Inspections['Fortnight'] = 5
-#F5InspectionsList = F4Inspections[['ConsentNo','Fortnight']]
-#
-#SampledInspections = pd.merge(SampledInspections, F5InspectionsList, on = 'ConsentNo', how = 'left')
-#SampledInspections = SampledInspections[(SampledInspections['Fortnight'] != 5)]
-#
-#
-#SampledInspections['Fortnight'] = 0
-#
-#NoInspectionsList = SampledInspections[['ConsentNo','Fortnight']]
-#
-#
-#
-#
-#
-#InspectionAllocations = pd.concat([
-#                                NecessaryInspectionsList,
-#                                F1InspectionsList,
-#                                F2InspectionsList, 
-#                                F3InspectionsList,
-#                                F4InspectionsList,
-#                                F5InspectionsList,
-#                                NoInspectionsList
-##                                WUGInspectionList
-#                                ])
-#
-#
-#
-#InspectionAllocations = pd.merge(InspectionAllocations, InspectionList, on = 'ConsentNo', how = 'left')
-#
-#
-#Officers = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\Officers.csv")
-#
-#
-#InspectionAllocations.loc[InspectionAllocations['Fortnight'] == 3, 'RMO'] = random.choices(Officers['RMO'],Officers['F1Weight'], k= (SecondRunCount-WUGGroup3))
-#InspectionAllocations.loc[InspectionAllocations['Fortnight'] == 2, 'RMO'] = random.choices(Officers['RMO'],Officers['F2Weight'], k= FirstRunCount)
-#
-#FirstPush = InspectionAllocations[InspectionAllocations['Fortnight'].notnull()]
-#
-#FirstPush.to_csv('FirstPush.csv')
-#
-#
-#Fortnight3 = SecondRunCount-NecessaryGroup3 - WUGGroup3
-#Fortnight4 = SecondRunCount-NecessaryGroup4 - WUGGroup4
-#Fortnight5 = SecondRunCount-NecessaryGroup5 - WUGGroup5
-#
-#
-#tempList = InspectionAllocations
-#
-#tempList['RMO'] = random.choices(Officers['RMO'],Officers['F1Weight'], k=len(tempList))
-#
-#import random
-#tempList.loc[tempList['Fortnight'] == 1, 'RMO'] = random.choices(Officers['RMO'],Officers['F1Weight'], k= Fortnight1)
-#tempList.loc[tempList['Fortnight'] == 2, 'RMO'] = random.choices(Officers['RMO'],Officers['F2Weight'], k= FirstRunCount)
-#
-#FortnightTotals = tempList.groupby(['Fortnight'], as_index = False
-#                 ).agg({'ConsentNo': 'count'})
-#
-#
-#Officers
-#Key, Officer, Team, Weight
-#
-#
-#
-#Officers = pd.DataFrame([
-#        ['Mr. AAA','Mr. BB','Mr. X'], 
-#        [1,1,0.5]]).T
-#
-#Officers.columns = ['RMO','Weights']
-#tempList = F4InspectionsList
-#tempList['RMO'] = random.choices(Officers['RMO'],Officers['Weights'], k=len(tempList))
-#     
-#
-#
-#
-#
-#Officers.sum(axis = 0, skipna = True)
-#
-#
-#tempList = F4InspectionsList
-#
-#
-#tempList.groupby(['RMO'], as_index = False
-#                 ).agg({'ConsentNo': 'count'})
-#
-#
-#RMO =  ['Mr. Smith','Mr. Jones','Mr. X']
-#Weights =   [0.5,0.2,0.3]   
-#        
-#
-#random.choices(RMO,Weights, k=30)
-##
-#Officers[1]
-#
-##SecondRun = SecondInspections.sample(n=FirstRunCount, weights = 'TotalRisk', random_state = 1)
-#
-#
-##df.sample(n=2, weights='num_specimen_seen', random_state=1)
-#
-#
-#import random
-#random.choices(['one', 'two', 'three'], [0.2, 0.3, 0.5], k=10)
-#
-#
-#
-#
-#
-#
-#FirstInspections
-#Accela user ID
-#Note
-#Other columns
-#
-#extra single inspections
+print('F5 Inspections: ', F5Inspections.ConsentNo.count())
+
+
+SecondInspectionAllocations = pd.concat([
+                                F4Inspections,
+                                F5Inspections
+                                ])
+
+
+SecondInspections = pd.merge(SecondInspections, SecondInspectionAllocations, on = 'ConsentNo', how = 'left')
+
+SecondInspections = SecondInspections[SecondInspections['RMO'].notnull()]
+
+
+
+print('Second Push Inspections: ', SecondInspections.ConsentNo.count())
+
+SecondInspections = pd.merge(SecondInspections, df, on = 'ConsentNo', how = 'left')
+
+SecondInspections.to_csv('SecondInspections-pending.csv')
+
+
+
+#fomat for elvin.
+###########################################
+
