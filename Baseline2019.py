@@ -68,7 +68,8 @@ ConsentDetailsImportFilter = {
        'B1_PER_SUB_TYPE' : ['Water Permit (s14)'] ,
        'B1_APPL_STATUS' : ['Terminated - Replaced',
                            'Issued - Active',
-                           'Issued - s124 Continuance']      
+                           'Issued - s124 Continuance',
+                           ]      
         }
 ConsentDetailswhere_op = 'AND'
 ConsentDetailsDate_col = 'toDate'
@@ -1153,8 +1154,8 @@ print('\nNonCompliance Table ',
 
 ### Import Campaign Participants
 # Import data from campaigns team
-CampaignConsent = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\CampaignConsents.csv")
-CampaignWAP = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\CampaignWAPs.csv")
+CampaignConsent = pd.read_csv( r"\\fs02\\ManagedShares\\Data\\Implementation Support\\Python Scripts\\scripts\\Import\\CampaignConsents.csv")
+CampaignWAP = pd.read_csv( r"\\fs02\\ManagedShares\\Data\\Implementation Support\\Python Scripts\\scripts\\Import\\CampaignWAPs.csv")
 
 # Remove duplicates
 CampaignConsent = CampaignConsent.drop_duplicates(subset =
@@ -1170,7 +1171,7 @@ print('CampaignWAP ', CampaignWAP.shape, '\n',
 
 ### Import Midseason Inspections
 # Import data from inspections team
-MidseasonInspections = pd.read_csv(r"D:\\Implementation Support\\Python Scripts\\scripts\\Import\\MidseasonInspections.csv")
+MidseasonInspections = pd.read_csv( r"\\fs02\\ManagedShares\\Data\\Implementation Support\\Python Scripts\\scripts\\Import\\MidseasonInspections.csv")
 
 ##############################################################################
 ### Import Summary Table
@@ -1370,7 +1371,7 @@ Baseline = pd.merge(Baseline, WAPSummary,
 Baseline.to_csv('Baseline' + RunDate + '.csv')
 
 Baseline.to_csv(
-        r'D:\\Implementation Support\\Python Scripts\\scripts\\Import\\'+
+        r"\\fs02\\ManagedShares\\Data\\Implementation Support\\Python Scripts\\scripts\\Import\\"+
         'Baseline' + RunDate + '.csv')
 
 # Print overview of table
